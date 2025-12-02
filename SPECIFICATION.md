@@ -774,7 +774,7 @@ MrWebDefenceは、OpenAppSecをベースとしたWAF（Web Application Firewall�
 - signatures（シグニチャ）
   - id, name, description, content, version, created_at, updated_at, status
 - signature_candidates（シグニチャ候補）
-  - id, signature_id, status, verification_result, created_at
+  - id, signature_id, name, description, content, status, verification_result, first_verified_at, last_verified_at, created_at, updated_at
 - signature_rules（シグニチャルール）
   - id, signature_id, rule_type, rule_content
 - signature_applications（シグニチャ適用履歴）
@@ -852,7 +852,7 @@ MrWebDefenceは、OpenAppSecをベースとしたWAF（Web Application Firewall�
 - GET /api/v1/signature-groups/{id}
 - PUT /api/v1/signature-groups/{id}
 - DELETE /api/v1/signature-groups/{id}
-  - リクエストボディ: `{ "force": true }` で強制削除（チェックボックス相当）
+  - クエリパラメータ: `?force=true` で強制削除（チェックボックス相当）
   - 適用中のグループは通常削除不可（エラー403を返す）
   - 強制削除時は含まれるシグニチャを個別登録してからグループを削除
 - POST /api/v1/signature-groups/{id}/members

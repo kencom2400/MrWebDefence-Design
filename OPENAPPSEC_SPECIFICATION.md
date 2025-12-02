@@ -72,7 +72,7 @@ OpenAppSecは各HTTPリクエストに対して2段階の検知プロセスを�
   - パストラバーサル
   - その他の一般的なWeb攻撃
 - **設定可能なパラメータ**：
-  - `max-body-size-kb`: 最大ボディサイズ（デフォルト: 1000000KB）
+  - `max-body-size-kb`: 最大ボディサイズ（デフォルト: 10000KB = 10MB）
   - `max-header-size-bytes`: 最大ヘッダーサイズ（デフォルト: 102400バイト）
   - `max-object-depth`: 最大オブジェクト深度（デフォルト: 40）
   - `max-url-size-bytes`: 最大URLサイズ（デフォルト: 32768バイト）

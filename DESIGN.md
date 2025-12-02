@@ -556,7 +556,7 @@ users (1) ──< (N) user_roles (N) >── (1) roles
   │
   └──< (N) sessions
   │
-  └──< (N) ip_allowlist_users
+  └──< (N) ip_allowlist (user_idで関連)
 ```
 
 ### 3.3.2 顧客・FQDN関連
@@ -566,7 +566,7 @@ customers (1) ──< (N) fqdns
   │
   └──< (N) customer_signature_group_settings
   │
-  └──< (N) customer_users
+  └──< (N) users (customer_idで関連)
 ```
 
 ### 3.3.3 シグニチャ関連
@@ -761,6 +761,21 @@ signatures (1) ──< (N) signature_group_members (N) >── (1) signature_gro
 - PRIMARY KEY (id)
 - INDEX (status)
 - INDEX (last_verified_at)
+
+#### signature_applications（シグニチャ適用履歴）
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| signature_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | シグニチャID |
+| applied_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 適用日時 |
+| applied_by | BIGINT UNSIGNED | NULL, FOREIGN KEY | 適用者ユーザーID |
+| status | ENUM('active', 'inactive', 'deprecated') | NOT NULL, DEFAULT 'active' | ステータス |
+
+**インデックス**:
+- PRIMARY KEY (id)
+- INDEX (signature_id)
+- INDEX (applied_at)
 
 #### customer_signature_group_settings（顧客別シグニチャグループ設定）
 
@@ -1126,12 +1141,10 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
 
 #### DELETE /api/v1/signature-groups/{id}
 
-**リクエストボディ** (強制削除の場合):
-```json
-{
-  "force": true
-}
-```
+**クエリパラメータ** (強制削除の場合):
+- `force=true`: 強制削除を実行
+
+**例**: `DELETE /api/v1/signature-groups/1?force=true`
 
 **レスポンス** (200):
 ```json
