@@ -224,7 +224,7 @@ practices:
       configmap: []
       override-mode: prevent-learn
     web-attacks:
-      max-body-size-kb: 1000000
+      max-body-size-kb: 10000
       max-header-size-bytes: 102400
       max-object-depth: 40
       max-url-size-bytes: 32768
