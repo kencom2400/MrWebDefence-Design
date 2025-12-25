@@ -1,0 +1,18 @@
+# MrWebDefence-Design プロジェクト設定ファイル
+# このファイルは、プロジェクト単位の設定を定義します
+
+project_name: mrwebdefence-design
+repositories:
+  - name: MrWebDefence-Design
+    url: https://github.com/kencom2400/MrWebDefence-Design
+    branch: main
+    language: python/3.10,go/1.21,typescript/node-20
+
+# Issueトラッカー設定
+issue_tracker: jira
+
+# Jira設定（issue_tracker が jira の場合に必須）
+jira:
+  project_key: MWD
+  base_url: https://kencom2400.atlassian.net
+
