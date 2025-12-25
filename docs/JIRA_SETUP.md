@@ -6,19 +6,21 @@
 
 ### ✅ 完了済み設定
 
-1. **Jira基本設定** (`scripts/jira/config.sh`)
-   - プロジェクトキー: `MWD`
-   - ベースURL: `https://kencom2400.atlassian.net`
+1. **プロジェクト設定ファイル（Single Source of Truth）** (`config/projects/mrwebdefence-design.yaml`)
    - Issueトラッカー: `jira`
+   - Jiraプロジェクトキー: `MWD`
+   - JiraベースURL: `https://kencom2400.atlassian.net`
+   - ⭐ このファイルが設定の唯一の情報源です
 
-2. **認証情報** (`scripts/jira/config.local.sh`)
+2. **基本設定スクリプト** (`scripts/jira/config.sh`)
+   - YAMLファイルから設定を自動読み込み
+   - 環境変数との統合を管理
+   - 設定の優先順位を制御
+
+3. **認証情報** (`scripts/jira/config.local.sh`)
    - Jira Email: 設定済み
    - Jira API Token: 設定済み
    - ⚠️ このファイルは`.gitignore`に追加されているため、Gitにpushされません
-
-3. **プロジェクト設定ファイル** (`config/projects/mrwebdefence-design.yaml`)
-   - Issueトラッカー: `jira`
-   - Jiraプロジェクトキー: `MWD`
 
 4. **Jira接続テスト**
    - ✅ プロジェクト情報取得: 成功
@@ -110,10 +112,51 @@ Backlog → To Do → In Progress → Done
 
 ## 設定ファイルの場所
 
-- **基本設定**: `scripts/jira/config.sh`
+- **プロジェクト設定（Single Source of Truth）**: `config/projects/mrwebdefence-design.yaml`
+  - このファイルが設定の唯一の情報源です
+  - プロジェクトキー、ベースURL、Issueトラッカー種別を定義
+- **基本設定スクリプト**: `scripts/jira/config.sh`
+  - YAMLファイルから設定を読み込む
+  - 環境変数やデフォルト値との統合を管理
 - **認証情報**: `scripts/jira/config.local.sh`（`.gitignore`に追加）
-- **プロジェクト設定**: `config/projects/mrwebdefence-design.yaml`
+  - Jira Email と API Token を設定
+  - ローカル環境専用（Gitにpushされません）
 - **共通関数**: `scripts/jira/common.sh`
+  - Jira API呼び出しの共通関数
+
+## 設定の優先順位
+
+設定値は以下の優先順位で適用されます（高い順）：
+
+1. **環境変数**（最優先）
+   - `JIRA_PROJECT_KEY`, `JIRA_BASE_URL`, `ISSUE_TRACKER` など
+   - CI/CD環境や一時的な設定変更に使用
+
+2. **プロジェクト設定ファイル**（`config/projects/mrwebdefence-design.yaml`）
+   - **Single Source of Truth**: このファイルが設定の唯一の情報源です
+   - プロジェクト全体で共有される設定
+   - 変更時はGitで管理され、レビューが必要
+
+3. **ローカル設定ファイル**（`scripts/jira/config.local.sh`）
+   - 認証情報（`JIRA_EMAIL`, `JIRA_API_TOKEN`）のみ
+   - 個人環境専用（Gitにpushされません）
+
+4. **デフォルト値**
+   - `config.sh`内で定義されたフォールバック値
+
+### Single Source of Truthについて
+
+`config/projects/mrwebdefence-design.yaml`は、プロジェクト設定の**Single Source of Truth**（唯一の情報源）として設計されています。
+
+**メリット:**
+- 設定の重複を排除
+- 設定変更時の影響範囲が明確
+- バージョン管理とレビューが容易
+- 複数環境での設定管理が統一
+
+**注意事項:**
+- `scripts/jira/config.sh`内のハードコードされた値は、YAMLファイルから読み込まれる値で上書きされます
+- 環境変数が設定されている場合は、環境変数が最優先されます
 
 ## トラブルシューティング
 
