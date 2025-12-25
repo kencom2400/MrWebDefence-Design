@@ -1,0 +1,13 @@
+# Jira認証情報（ローカル設定ファイル）
+scripts/jira/config.local.sh
+
+# Issue作成用のdraftファイル（作業中のファイル）
+scripts/github/issues/issue-data/drafts/*.md
+scripts/github/issues/issue-data/drafts/*.json
+scripts/github/issues/issue-data/drafts/*.yml
+
+# その他のdraftファイル
+scripts/jira/issues/drafts/*.md
+scripts/jira/issues/drafts/*.json
+scripts/jira/issues/drafts/*.yml
+
