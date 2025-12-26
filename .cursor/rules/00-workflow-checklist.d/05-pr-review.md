@@ -114,6 +114,30 @@
 - **指摘**: コードの構造や設計に関する提案
 - **対応**: 提案を検討し、必要に応じてリファクタリング
 
+**条件分岐の簡略化**
+- **指摘**: 同じパターンの条件分岐が繰り返されている
+- **対応**: ヘルパー関数を作成して重複を削減
+  ```bash
+  # 悪い例: 同じパターンが繰り返される
+  if [ -n "$value1" ] && [ "$value1" != "null" ] && [ -z "${VAR1:-}" ]; then
+    VAR1="$value1"
+  fi
+  if [ -n "$value2" ] && [ "$value2" != "null" ] && [ -z "${VAR2:-}" ]; then
+    VAR2="$value2"
+  fi
+  
+  # 良い例: ヘルパー関数で統合
+  set_config_if_unset() {
+    local yaml_value="$1"
+    local env_var_name="$2"
+    if [ -n "$yaml_value" ] && [ "$yaml_value" != "null" ] && [ -z "${!env_var_name:-}" ]; then
+      eval "$env_var_name=\"\$yaml_value\""
+    fi
+  }
+  set_config_if_unset "$value1" "VAR1"
+  set_config_if_unset "$value2" "VAR2"
+  ```
+
 **セキュリティ**
 - **指摘**: セキュリティ上の懸念
 - **対応**: 即座に対応し、セキュリティベストプラクティスに準拠
