@@ -46,39 +46,40 @@ load_project_config() {
   fi
   
   # YAMLファイルから設定を読み込む
-  local issue_tracker
-  local jira_project_key
-  local jira_base_url
-  
-  issue_tracker=$(yq eval '.issue_tracker // ""' "$project_config_file" 2>/dev/null)
-  jira_project_key=$(yq eval '.jira.project_key // ""' "$project_config_file" 2>/dev/null)
-  jira_base_url=$(yq eval '.jira.base_url // ""' "$project_config_file" 2>/dev/null)
-  
   # 環境変数が設定されていない場合のみ、YAMLファイルの値を設定
-  if [ -n "$issue_tracker" ] && [ "$issue_tracker" != "null" ] && [ -z "${ISSUE_TRACKER:-}" ]; then
-    export ISSUE_TRACKER="$issue_tracker"
-  fi
+  # 注意: 関数内では変数に設定するのみ（exportは呼び出し元で行う）
   
-  if [ -n "$jira_project_key" ] && [ "$jira_project_key" != "null" ] && [ -z "${JIRA_PROJECT_KEY:-}" ]; then
-    export JIRA_PROJECT_KEY="$jira_project_key"
-  fi
+  # ヘルパー関数: YAML値が有効で環境変数が未設定の場合に設定
+  set_config_if_unset() {
+    local yaml_value="$1"
+    local env_var_name="$2"
+    
+    # yqの"null"文字列と空文字をチェック（yqはnullを"null"文字列として返すことがある）
+    if [ -n "$yaml_value" ] && [ "$yaml_value" != "null" ] && [ -z "${!env_var_name:-}" ]; then
+      eval "$env_var_name=\"\$yaml_value\""
+    fi
+  }
   
-  if [ -n "$jira_base_url" ] && [ "$jira_base_url" != "null" ] && [ -z "${JIRA_BASE_URL:-}" ]; then
-    export JIRA_BASE_URL="$jira_base_url"
-  fi
+  # 各設定を読み込んで設定
+  set_config_if_unset "$(yq eval '.issue_tracker // ""' "$project_config_file" 2>/dev/null)" "ISSUE_TRACKER"
+  set_config_if_unset "$(yq eval '.jira.project_key // ""' "$project_config_file" 2>/dev/null)" "JIRA_PROJECT_KEY"
+  set_config_if_unset "$(yq eval '.jira.base_url // ""' "$project_config_file" 2>/dev/null)" "JIRA_BASE_URL"
 }
 
-# プロジェクト設定ファイルから設定を読み込む
+# プロジェクト設定ファイルから設定を読み込む（readonly定義前に実行）
 load_project_config
 
 # Issueトラッカー設定（環境変数 > YAML > デフォルト）
-readonly ISSUE_TRACKER="${ISSUE_TRACKER:-jira}"
+# readonlyは最後に定義
+ISSUE_TRACKER="${ISSUE_TRACKER:-jira}"
 export ISSUE_TRACKER
+readonly ISSUE_TRACKER
 
 # Jira設定（環境変数 > YAML > デフォルト）
-readonly JIRA_PROJECT_KEY="${JIRA_PROJECT_KEY:-MWD}"
-readonly JIRA_BASE_URL="${JIRA_BASE_URL:-https://kencom2400.atlassian.net}"
+JIRA_PROJECT_KEY="${JIRA_PROJECT_KEY:-MWD}"
+JIRA_BASE_URL="${JIRA_BASE_URL:-https://kencom2400.atlassian.net}"
 export JIRA_PROJECT_KEY JIRA_BASE_URL
+readonly JIRA_PROJECT_KEY JIRA_BASE_URL
 
 # 認証情報（環境変数またはconfig.local.shから取得）
 # 注意: これらの値は環境変数またはconfig.local.shで設定する必要があります
