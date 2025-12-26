@@ -55,30 +55,34 @@ load_project_config() {
   jira_base_url=$(yq eval '.jira.base_url // ""' "$project_config_file" 2>/dev/null)
   
   # 環境変数が設定されていない場合のみ、YAMLファイルの値を設定
+  # 注意: 関数内では変数に設定するのみ（exportは呼び出し元で行う）
   if [ -n "$issue_tracker" ] && [ "$issue_tracker" != "null" ] && [ -z "${ISSUE_TRACKER:-}" ]; then
-    export ISSUE_TRACKER="$issue_tracker"
+    ISSUE_TRACKER="$issue_tracker"
   fi
   
   if [ -n "$jira_project_key" ] && [ "$jira_project_key" != "null" ] && [ -z "${JIRA_PROJECT_KEY:-}" ]; then
-    export JIRA_PROJECT_KEY="$jira_project_key"
+    JIRA_PROJECT_KEY="$jira_project_key"
   fi
   
   if [ -n "$jira_base_url" ] && [ "$jira_base_url" != "null" ] && [ -z "${JIRA_BASE_URL:-}" ]; then
-    export JIRA_BASE_URL="$jira_base_url"
+    JIRA_BASE_URL="$jira_base_url"
   fi
 }
 
-# プロジェクト設定ファイルから設定を読み込む
+# プロジェクト設定ファイルから設定を読み込む（readonly定義前に実行）
 load_project_config
 
 # Issueトラッカー設定（環境変数 > YAML > デフォルト）
-readonly ISSUE_TRACKER="${ISSUE_TRACKER:-jira}"
+# readonlyは最後に定義
+ISSUE_TRACKER="${ISSUE_TRACKER:-jira}"
 export ISSUE_TRACKER
+readonly ISSUE_TRACKER
 
 # Jira設定（環境変数 > YAML > デフォルト）
-readonly JIRA_PROJECT_KEY="${JIRA_PROJECT_KEY:-MWD}"
-readonly JIRA_BASE_URL="${JIRA_BASE_URL:-https://kencom2400.atlassian.net}"
+JIRA_PROJECT_KEY="${JIRA_PROJECT_KEY:-MWD}"
+JIRA_BASE_URL="${JIRA_BASE_URL:-https://kencom2400.atlassian.net}"
 export JIRA_PROJECT_KEY JIRA_BASE_URL
+readonly JIRA_PROJECT_KEY JIRA_BASE_URL
 
 # 認証情報（環境変数またはconfig.local.shから取得）
 # 注意: これらの値は環境変数またはconfig.local.shで設定する必要があります
