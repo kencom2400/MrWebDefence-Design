@@ -567,8 +567,7 @@ Jira統合で実装された`start-task.sh`スクリプトを使用して、Issu
 3. mainブランチの最新化
 4. フィーチャーブランチの作成（`feature/{ISSUE_KEY}-{タイトル}`）
 5. **🚨 CRITICAL: JiraでステータスをIn Progressに変更（必須）**
-   - チケット開始時には必ずステータスを「In Progress」（日本語: 「進行中」）に変更すること
-   - ステータス変更に失敗した場合は警告を表示するが、作業は継続可能
+   - **詳細**: `.cursor/rules/00-workflow-checklist.d/02-task-start.md`の「🚨 CRITICAL: 必ずステータスを「In Progress」に変更」を参照
 
 #### エラーハンドリング
 

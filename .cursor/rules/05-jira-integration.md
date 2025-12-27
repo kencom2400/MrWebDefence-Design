@@ -148,8 +148,7 @@ Backlog → To Do → In Progress → Done
 - **To Do**: 次に取り組むチケットとして選択した時
 - **In Progress**: 実際の作業を開始した時
   - **🚨 CRITICAL: `@start-task`コマンド実行時には必ずステータスを「In Progress」に変更すること**
-  - チケット開始時には必ずステータスを「In Progress」（日本語: 「進行中」）に変更すること
-  - ステータス変更に失敗した場合は警告を表示するが、作業は継続可能
+  - **詳細**: `.cursor/rules/00-workflow-checklist.d/02-task-start.md`の「🚨 CRITICAL: 必ずステータスを「In Progress」に変更」を参照
 - **Done**: 作業が完了し、PRがマージされた時
 
 ## 3. フィールド定義の取得方法
@@ -267,9 +266,8 @@ curl -X POST "https://kencom2400.atlassian.net/rest/api/3/issue" \
 
 **`@start-task`コマンド実行時には必ずステータスを「In Progress」に変更すること**
 
-- チケット開始時には必ずステータスを「In Progress」（日本語: 「進行中」）に変更すること
+- **詳細**: `.cursor/rules/00-workflow-checklist.d/02-task-start.md`の「🚨 CRITICAL: 必ずステータスを「In Progress」に変更」を参照
 - `start-task.sh`スクリプトが自動的にステータスを変更します
-- ステータス変更に失敗した場合は警告を表示するが、作業は継続可能
 
 ### 遷移可能なステータスの確認
 

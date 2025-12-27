@@ -41,7 +41,7 @@
 - ✅ **必ずIssueトラッカーのステータスをIn Progressに変更**
   - GitHub Projects: `./scripts/github/workflow/start-task.sh`
   - Jira: `./scripts/jira/workflow/start-task.sh`
-  - **必須**: チケット開始時には必ずステータスを「In Progress」に変更すること
+  - **詳細**: 上記の「🚨 CRITICAL: 必ずステータスを「In Progress」に変更」を参照
 - ✅ 各IssueのAssignee情報を確認し、自分にアサインされているものをフィルタリング
 
 **🔴 実行権限について:**
