@@ -387,94 +387,318 @@ MrWebDefenceシステムは、OpenAppSecをベースとしたWAFサービスを�
 
 #### 3.1.3.1 コンポーネント構成
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     管理画面（Web UI）                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ サービス全体  │  │ 顧客向け管理  │  │ 認証・認可    │      │
-│  │ 管理画面      │  │ 画面          │  │ サービス      │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                            │ HTTPS
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   管理API（REST API）                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ 設定管理API   │  │ ユーザー管理  │  │ ログ取得API   │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    バックエンドサービス                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ 設定管理      │  │ シグニチャ    │  │ ユーザー管理  │      │
-│  │ サービス      │  │ 収集サービス  │  │ サービス      │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      データストア                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ リレーショナル│  │ キャッシュ    │  │ オブジェクト │      │
-│  │ DB（MySQL）   │  │ （Redis）     │  │ ストレージ    │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph "管理画面（Web UI）"
+        AdminUI[サービス全体管理画面]
+        CustomerUI[顧客向け管理画面]
+        AuthUI[認証・認可サービス]
+    end
 
-┌─────────────────────────────────────────────────────────────┐
-│                    WAFエンジン（Docker）                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Nginx         │  │ OpenAppSec   │  │ 設定取得     │      │
-│  │               │  │              │  │ エージェント  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│  ┌──────────────┐  ┌──────────────┐                        │
-│  │ ログ転送      │  │ レート制限    │                        │
-│  │ エージェント  │  │ （Redis連携） │                        │
-│  └──────────────┘  └──────────────┘                        │
-└─────────────────────────────────────────────────────────────┘
-                            │ HTTPS/HTTP
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    ログ管理サーバ                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ ログ収集      │  │ ログ分析      │  │ ログ転送      │      │
-│  │ サービス      │  │ エンジン      │  │ サービス      │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
+    subgraph "管理API（REST API）"
+        ConfigAPI[設定管理API]
+        UserAPI[ユーザー管理API]
+        LogAPI[ログ取得API]
+    end
+
+    subgraph "バックエンドサービス"
+        ConfigService[設定管理サービス]
+        SignatureService[シグニチャ収集サービス]
+        UserService[ユーザー管理サービス]
+        LogService[ログ管理サービス]
+    end
+
+    subgraph "データストア"
+        MySQL[(MySQL<br/>リレーショナルDB)]
+        Redis[(Redis<br/>キャッシュ・セッション)]
+    end
+
+    subgraph "WAFエンジン（Docker）"
+        Nginx[Nginx]
+        OpenAppSec[OpenAppSec]
+        ConfigAgent[設定取得エージェント]
+        LogAgent[ログ転送エージェント]
+        RateLimit[レート制限<br/>Redis連携]
+    end
+
+    subgraph "ログ管理サーバ"
+        LogCollector[ログ収集サービス]
+        LogAnalyzer[ログ分析エンジン]
+        LogForwarder[ログ転送サービス]
+    end
+
+    AdminUI -->|HTTPS| ConfigAPI
+    CustomerUI -->|HTTPS| UserAPI
+    AuthUI -->|HTTPS| UserAPI
+
+    ConfigAPI --> ConfigService
+    UserAPI --> UserService
+    LogAPI --> LogService
+
+    ConfigService --> MySQL
+    ConfigService --> Redis
+    SignatureService --> MySQL
+    UserService --> MySQL
+    UserService --> Redis
+    LogService --> LogAnalyzer
+
+    ConfigAgent -->|HTTPS<br/>設定取得| ConfigAPI
+    Nginx --> OpenAppSec
+    OpenAppSec --> ConfigAgent
+    LogAgent -->|HTTP/TCP<br/>ログ転送| LogCollector
+    RateLimit --> Redis
+
+    LogCollector --> LogAnalyzer
+    LogAnalyzer --> LogForwarder
+    LogForwarder -->|S3/外部システム| ExternalStorage[外部ストレージ]
 ```
 
-#### 3.1.3.2 コンポーネント間の関係性
+#### 3.1.3.2 各コンポーネントの責務
+
+##### 管理画面（Web UI）
+- **サービス全体管理画面**: サービス管理者向けの管理機能を提供
+  - 顧客管理、ユーザー管理、シグニチャグループ管理
+  - システム設定、通知設定
+- **顧客向け管理画面**: 顧客管理者・顧客メンバー向けの管理機能を提供
+  - シグニチャグループ設定、ログ閲覧、FQDN管理
+- **認証・認可サービス**: ユーザー認証とセッション管理を提供
+  - ログイン、ログアウト、MFA設定
+
+##### 管理API（REST API）
+- **設定管理API**: WAFエンジン向けの設定配信API
+  - シグニチャグループ設定の取得、FQDN設定の取得
+- **ユーザー管理API**: ユーザー管理機能を提供
+  - ユーザーCRUD、ロール管理、認証
+- **ログ取得API**: ログ閲覧機能を提供
+  - ログ検索、ログダウンロード
+
+##### バックエンドサービス
+- **設定管理サービス**: WAFエンジン向けの設定を管理
+  - シグニチャグループの適用状態管理、設定のバージョン管理
+- **シグニチャ収集サービス**: 新規シグニチャの生成・検証・承認を管理
+  - シグニチャ候補の生成、検証バッチ実行、承認ワークフロー
+- **ユーザー管理サービス**: ユーザーと顧客の管理
+  - ユーザーCRUD、顧客CRUD、認証・認可ロジック
+- **ログ管理サービス**: ログの取得・検索・ダウンロードを管理
+  - ログ管理サーバとの連携、ログ検索、ログダウンロード
+
+##### データストア
+- **MySQL**: 永続的なデータを保存
+  - ユーザー、顧客、シグニチャ、設定等のリレーショナルデータ
+- **Redis**: 一時的なデータを保存
+  - セッション情報、キャッシュ、レート制限カウンター
+
+##### WAFエンジン（Docker）
+- **Nginx**: WebサーバーとしてHTTPリクエストを処理
+  - リバースプロキシ、SSL/TLS終端、ログ出力
+- **OpenAppSec**: WAFエンジンとして攻撃を検知・ブロック
+  - 機械学習ベースの攻撃検知、シグニチャベースの検知
+- **設定取得エージェント**: 管理APIから設定を取得してOpenAppSecに適用
+  - ポーリングまたはWebhookで設定を取得、設定ファイルの動的更新
+- **ログ転送エージェント**: WAF検知ログをログ管理サーバに転送
+  - Fluentdを使用したログ転送、リトライロジック
+- **レート制限**: Redis連携によるレート制限機能
+  - スライディングウィンドウ方式、分散環境対応
+
+##### ログ管理サーバ
+- **ログ収集サービス**: WAFエンジンからログを受信
+  - Fluentd/Fluent Bitによるログ受信、ログパース・正規化
+- **ログ分析エンジン**: ログを分析して攻撃パターンを検出
+  - 攻撃分析、検知漏れ分析、誤検知分析
+- **ログ転送サービス**: ログを外部システムに転送
+  - S3へのアーカイブ、Splunk/Datadogへの転送（将来拡張）
+
+#### 3.1.3.3 コンポーネント間の関係性
+
+```mermaid
+graph LR
+    subgraph "外部"
+        User[ユーザー]
+        Client[クライアント]
+    end
+
+    subgraph "管理画面層"
+        AdminUI[管理画面]
+    end
+
+    subgraph "API層"
+        ConfigAPI[設定管理API]
+        UserAPI[ユーザー管理API]
+        LogAPI[ログ取得API]
+    end
+
+    subgraph "サービス層"
+        ConfigService[設定管理サービス]
+        UserService[ユーザー管理サービス]
+        LogService[ログ管理サービス]
+    end
+
+    subgraph "データ層"
+        MySQL[(MySQL)]
+        Redis[(Redis)]
+    end
+
+    subgraph "WAF層"
+        WAFEngine[WAFエンジン]
+    end
+
+    subgraph "ログ層"
+        LogServer[ログ管理サーバ]
+    end
+
+    User -->|HTTPS| AdminUI
+    Client -->|HTTP/HTTPS| WAFEngine
+
+    AdminUI -->|REST API<br/>HTTPS| ConfigAPI
+    AdminUI -->|REST API<br/>HTTPS| UserAPI
+    AdminUI -->|REST API<br/>HTTPS| LogAPI
+
+    ConfigAPI -->|内部API呼び出し| ConfigService
+    UserAPI -->|内部API呼び出し| UserService
+    LogAPI -->|内部API呼び出し| LogService
+
+    ConfigService -->|接続プール| MySQL
+    ConfigService -->|直接接続| Redis
+    UserService -->|接続プール| MySQL
+    UserService -->|直接接続| Redis
+    LogService -->|内部API呼び出し| LogServer
+
+    WAFEngine -->|REST API<br/>HTTPS<br/>設定取得| ConfigAPI
+    WAFEngine -->|直接接続<br/>レート制限| Redis
+    WAFEngine -->|HTTP/TCP<br/>ログ転送| LogServer
+```
+
+**関係性の詳細:**
 
 1. **管理画面 ↔ 管理API**: REST API（HTTPS）
+   - セッションクッキーによる認証
+   - JSON形式でのデータ交換
+
 2. **管理API ↔ バックエンドサービス**: 内部API呼び出し
-3. **バックエンドサービス ↔ データストア**: 
-   - MySQL: 接続プール経由
-   - Redis: 直接接続
-4. **WAFエンジン ↔ 管理API**: REST API（設定取得、HTTPS）
-5. **WAFエンジン ↔ ログ管理サーバ**: HTTP/TCP（ログ転送）
-6. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
+   - 同一ネットワーク内での通信
+   - 認証不要（内部通信）
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
 
-#### 3.1.3.3 データフロー
+3. **バックエンドサービス ↔ ログ管理サーバ**: 内部API呼び出し
+   - ログ管理サービスがログ管理サーバと連携
+   - 同一ネットワーク内での通信
+   - 認証不要（内部通信）
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
 
-#### 設定配信フロー
-```
-管理画面 → 管理API → バックエンドサービス → MySQL
-                                    ↓
-                              WAFエンジン（ポーリング/Webhook）
+4. **バックエンドサービス ↔ データストア**: 
+   - **MySQL**: 接続プール経由で接続
+   - **Redis**: 直接接続（セッション、キャッシュ、レート制限）
+
+5. **WAFエンジン ↔ 管理API**: REST API（設定取得、HTTPS）
+   - APIトークンによる認証
+   - ポーリングまたはWebhookで設定を取得
+
+6. **WAFエンジン ↔ ログ管理サーバ**: HTTP/TCP（ログ転送）
+   - Fluentd Forward Protocol
+   - 内部ネットワーク内での通信（認証なし）
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
+
+7. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
+   - Redis Protocolで直接接続
+   - レート制限カウンターの管理
+
+#### 3.1.3.4 データフロー
+
+##### 設定配信フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant API as 管理API
+    participant Service as 設定管理サービス
+    participant DB as MySQL
+    participant ConfigAgent as 設定取得エージェント
+
+    UI->>API: シグニチャグループ設定変更
+    API->>Service: 設定更新リクエスト
+    Service->>DB: 設定を保存
+    DB-->>Service: 保存完了
+    Service-->>API: 更新完了
+    API-->>UI: 更新成功
+
+    Note over ConfigAgent: ポーリング（5分間隔）またはWebhook
+    ConfigAgent->>API: 設定取得リクエスト
+    API->>Service: 設定取得
+    Service->>DB: 設定を取得
+    DB-->>Service: 設定データ
+    Service-->>API: 設定データ
+    API-->>ConfigAgent: OpenAppSec設定形式
+    ConfigAgent->>ConfigAgent: 設定ファイル更新・リロード
 ```
 
-#### ログ転送フロー
-```
-WAFエンジン → Fluentd → ログ管理サーバ → ローカルストレージ/S3
+##### ログ転送フロー
+
+```mermaid
+sequenceDiagram
+    participant OpenAppSec as OpenAppSec
+    participant LogAgent as "LogAgent (Fluentd)"
+    participant LogCollector as "ログ収集サービス"
+    participant LogAnalyzer as "ログ分析エンジン"
+    participant Storage as ローカルストレージ/S3
+
+    OpenAppSec->>LogAgent: WAF検知ログ
+    LogAgent->>LogAgent: ログパース・正規化
+    LogAgent->>LogCollector: HTTP/TCP転送
+    LogCollector->>LogAnalyzer: ログ分析
+    LogAnalyzer->>Storage: ログ保存・アーカイブ
 ```
 
-#### 認証フロー
-```
-管理画面 → 管理API → 認証サービス → MySQL/Redis（セッション）
+##### ログ取得フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant LogAPI as ログ取得API
+    participant LogService as ログ管理サービス
+    participant LogAnalyzer as ログ分析エンジン
+    participant Storage as ローカルストレージ/S3
+
+    UI->>LogAPI: ログ検索リクエスト
+    LogAPI->>LogService: ログ検索リクエスト
+    LogService->>LogAnalyzer: ログ検索
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: 検索結果
+    LogService-->>LogAPI: 検索結果
+    LogAPI-->>UI: ログ一覧
+
+    UI->>LogAPI: ログダウンロードリクエスト
+    LogAPI->>LogService: ログダウンロードリクエスト
+    LogService->>LogAnalyzer: ログデータ取得
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: ログデータ
+    LogService-->>LogAPI: ログデータ
+    LogAPI-->>UI: ログダウンロード
 ```
 
-#### 3.1.3.4 通信プロトコル
+##### 認証フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant API as 管理API
+    participant UserService as "ユーザー管理サービス(認証)"
+    participant DB as MySQL
+    participant Redis as Redis
+
+    UI->>API: ログインリクエスト
+    API->>UserService: 認証リクエスト
+    UserService->>DB: ユーザー情報取得
+    DB-->>UserService: ユーザー情報
+    UserService->>UserService: パスワード検証
+    UserService->>Redis: セッション作成
+    Redis-->>UserService: セッションID
+    UserService-->>API: 認証成功・セッションID
+    API-->>UI: セッションクッキー設定
+```
+
+#### 3.1.3.5 通信プロトコル
 
 | コンポーネント間 | プロトコル | ポート | 認証 |
 |----------------|----------|--------|------|
@@ -484,7 +708,7 @@ WAFエンジン → Fluentd → ログ管理サーバ → ローカルストレ�
 | バックエンド ↔ MySQL | MySQL Protocol | 3306 | ユーザー名/パスワード |
 | バックエンド ↔ Redis | Redis Protocol | 6379 | パスワード（オプション） |
 
-#### 3.1.3.5 セキュリティ境界
+#### 3.1.3.6 セキュリティ境界
 
 - **外部境界**: 管理画面へのアクセス（HTTPS必須）
 - **内部境界**: 管理API ↔ バックエンドサービス（同一ネットワーク）
