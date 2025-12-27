@@ -387,108 +387,857 @@ MrWebDefenceシステムは、OpenAppSecをベースとしたWAFサービスを�
 
 #### 3.1.3.1 コンポーネント構成
 
+```mermaid
+graph TB
+    subgraph "管理画面（Web UI）"
+        AdminUI[サービス全体管理画面]
+        CustomerUI[顧客向け管理画面]
+        AuthUI[認証・認可サービス]
+    end
+
+    subgraph "管理API（REST API）"
+        ConfigAPI[設定管理API]
+        UserAPI[ユーザー管理API]
+        LogAPI[ログ取得API]
+    end
+
+    subgraph "バックエンドサービス"
+        ConfigService[設定管理サービス]
+        SignatureService[シグニチャ収集サービス]
+        UserService[ユーザー管理サービス]
+        LogService[ログ管理サービス]
+    end
+
+    subgraph "データストア"
+        MySQL[(MySQL<br/>リレーショナルDB)]
+        Redis[(Redis<br/>キャッシュ・セッション)]
+    end
+
+    subgraph "WAFエンジン（Docker）"
+        Nginx[Nginx]
+        OpenAppSec[OpenAppSec]
+        ConfigAgent[設定取得エージェント]
+        LogAgent[ログ転送エージェント]
+        RateLimit[レート制限<br/>Redis連携]
+    end
+
+    subgraph "ログ管理サーバ"
+        LogCollector[ログ収集サービス]
+        LogAnalyzer[ログ分析エンジン]
+        LogForwarder[ログ転送サービス]
+    end
+
+    AdminUI -->|HTTPS| ConfigAPI
+    CustomerUI -->|HTTPS| UserAPI
+    AuthUI -->|HTTPS| UserAPI
+
+    ConfigAPI --> ConfigService
+    UserAPI --> UserService
+    LogAPI --> LogService
+
+    ConfigService --> MySQL
+    ConfigService --> Redis
+    SignatureService --> MySQL
+    UserService --> MySQL
+    UserService --> Redis
+    LogService --> LogAnalyzer
+
+    ConfigAgent -->|HTTPS<br/>設定取得| ConfigAPI
+    Nginx --> OpenAppSec
+    OpenAppSec --> ConfigAgent
+    LogAgent -->|HTTP/TCP<br/>ログ転送| LogCollector
+    RateLimit --> Redis
+
+    LogCollector --> LogAnalyzer
+    LogAnalyzer --> LogForwarder
+    LogForwarder -->|S3/外部システム| ExternalStorage[外部ストレージ]
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     管理画面（Web UI）                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ サービス全体  │  │ 顧客向け管理  │  │ 認証・認可    │      │
-│  │ 管理画面      │  │ 画面          │  │ サービス      │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                            │ HTTPS
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   管理API（REST API）                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ 設定管理API   │  │ ユーザー管理  │  │ ログ取得API   │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    バックエンドサービス                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ 設定管理      │  │ シグニチャ    │  │ ユーザー管理  │      │
-│  │ サービス      │  │ 収集サービス  │  │ サービス      │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      データストア                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ リレーショナル│  │ キャッシュ    │  │ オブジェクト │      │
-│  │ DB（MySQL）   │  │ （Redis）     │  │ ストレージ    │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│                    WAFエンジン（Docker）                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Nginx         │  │ OpenAppSec   │  │ 設定取得     │      │
-│  │               │  │              │  │ エージェント  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│  ┌──────────────┐  ┌──────────────┐                        │
-│  │ ログ転送      │  │ レート制限    │                        │
-│  │ エージェント  │  │ （Redis連携） │                        │
-│  └──────────────┘  └──────────────┘                        │
-└─────────────────────────────────────────────────────────────┘
-                            │ HTTPS/HTTP
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    ログ管理サーバ                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ ログ収集      │  │ ログ分析      │  │ ログ転送      │      │
-│  │ サービス      │  │ エンジン      │  │ サービス      │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-```
+#### 3.1.3.2 各コンポーネントの責務
 
-#### 3.1.3.2 コンポーネント間の関係性
+##### 管理画面（Web UI）
+- **サービス全体管理画面**: サービス管理者向けの管理機能を提供
+  - 顧客管理、ユーザー管理、シグニチャグループ管理
+  - システム設定、通知設定
+- **顧客向け管理画面**: 顧客管理者・顧客メンバー向けの管理機能を提供
+  - シグニチャグループ設定、ログ閲覧、FQDN管理
+- **認証・認可サービス**: ユーザー認証とセッション管理を提供
+  - ログイン、ログアウト、MFA設定
 
-1. **管理画面 ↔ 管理API**: REST API（HTTPS）
-2. **管理API ↔ バックエンドサービス**: 内部API呼び出し
-3. **バックエンドサービス ↔ データストア**: 
-   - MySQL: 接続プール経由
-   - Redis: 直接接続
-4. **WAFエンジン ↔ 管理API**: REST API（設定取得、HTTPS）
-5. **WAFエンジン ↔ ログ管理サーバ**: HTTP/TCP（ログ転送）
-6. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
+##### 管理API（REST API）
+- **設定管理API**: WAFエンジン向けの設定配信API
+  - シグニチャグループ設定の取得、FQDN設定の取得
+- **ユーザー管理API**: ユーザー管理機能を提供
+  - ユーザーCRUD、ロール管理、認証
+- **ログ取得API**: ログ閲覧機能を提供
+  - ログ検索、ログダウンロード
+
+##### バックエンドサービス
+- **設定管理サービス**: WAFエンジン向けの設定を管理
+  - シグニチャグループの適用状態管理、設定のバージョン管理
+- **シグニチャ収集サービス**: 新規シグニチャの生成・検証・承認を管理
+  - シグニチャ候補の生成、検証バッチ実行、承認ワークフロー
+- **ユーザー管理サービス**: ユーザーと顧客の管理
+  - ユーザーCRUD、顧客CRUD、認証・認可ロジック
+- **ログ管理サービス**: ログの取得・検索・ダウンロードを管理
+  - ログ管理サーバとの連携、ログ検索、ログダウンロード
+
+##### データストア
+- **MySQL**: 永続的なデータを保存
+  - ユーザー、顧客、シグニチャ、設定等のリレーショナルデータ
+- **Redis**: 一時的なデータを保存
+  - セッション情報、キャッシュ、レート制限カウンター
+
+##### WAFエンジン（Docker）
+- **Nginx**: WebサーバーとしてHTTPリクエストを処理
+  - リバースプロキシ、SSL/TLS終端、ログ出力
+- **OpenAppSec**: WAFエンジンとして攻撃を検知・ブロック
+  - 機械学習ベースの攻撃検知、シグニチャベースの検知
+- **設定取得エージェント**: 管理APIから設定を取得してOpenAppSecに適用
+  - ポーリングまたはWebhookで設定を取得、設定ファイルの動的更新
+- **ログ転送エージェント**: WAF検知ログをログ管理サーバに転送
+  - Fluentdを使用したログ転送、リトライロジック
+- **レート制限**: Redis連携によるレート制限機能
+  - スライディングウィンドウ方式、分散環境対応
+
+##### ログ管理サーバ
+- **ログ収集サービス**: WAFエンジンからログを受信
+  - Fluentd/Fluent Bitによるログ受信、ログパース・正規化
+- **ログ分析エンジン**: ログを分析して攻撃パターンを検出
+  - 攻撃分析、検知漏れ分析、誤検知分析
+- **ログ転送サービス**: ログを外部システムに転送
+  - S3へのアーカイブ、Splunk/Datadogへの転送（将来拡張）
 
 #### 3.1.3.3 データフロー
 
-#### 設定配信フロー
-```
-管理画面 → 管理API → バックエンドサービス → MySQL
-                                    ↓
-                              WAFエンジン（ポーリング/Webhook）
+##### 設定配信フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant ConfigAPI as 設定管理API
+    participant ConfigService as 設定管理サービス
+    participant DB as MySQL
+    participant ConfigAgent as 設定取得エージェント
+
+    UI->>ConfigAPI: シグニチャグループ設定変更
+    ConfigAPI->>ConfigService: 設定更新リクエスト
+    ConfigService->>DB: 設定を保存
+    DB-->>ConfigService: 保存完了
+    ConfigService-->>ConfigAPI: 更新完了
+    ConfigAPI-->>UI: 更新成功
+
+    Note over ConfigAgent: ポーリング（5分間隔）またはWebhook
+    ConfigAgent->>ConfigAPI: 設定取得リクエスト
+    ConfigAPI->>ConfigService: 設定取得
+    ConfigService->>DB: 設定を取得
+    DB-->>ConfigService: 設定データ
+    ConfigService-->>ConfigAPI: 設定データ
+    ConfigAPI-->>ConfigAgent: OpenAppSec設定形式
+    ConfigAgent->>ConfigAgent: 設定ファイル更新・リロード
 ```
 
-#### ログ転送フロー
-```
-WAFエンジン → Fluentd → ログ管理サーバ → ローカルストレージ/S3
+##### ログ転送フロー
+
+```mermaid
+sequenceDiagram
+    participant OpenAppSec as OpenAppSec
+    participant LogAgent as "LogAgent (Fluentd)"
+    participant LogCollector as "ログ収集サービス"
+    participant LogAnalyzer as "ログ分析エンジン"
+    participant LogForwarder as "ログ転送サービス"
+    participant Storage as ローカルストレージ/S3
+
+    OpenAppSec->>LogAgent: WAF検知ログ
+    LogAgent->>LogAgent: ログパース・正規化
+    LogAgent->>LogCollector: HTTP/TCP転送
+    LogCollector->>LogAnalyzer: ログ分析
+    LogAnalyzer->>LogForwarder: 分析済みログ転送
+    LogForwarder->>Storage: ログ保存・アーカイブ
 ```
 
-#### 認証フロー
-```
-管理画面 → 管理API → 認証サービス → MySQL/Redis（セッション）
+##### ログ取得フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant LogAPI as ログ取得API
+    participant LogService as ログ管理サービス
+    participant LogAnalyzer as ログ分析エンジン
+    participant Storage as ローカルストレージ/S3
+
+    UI->>LogAPI: ログ検索リクエスト
+    LogAPI->>LogService: ログ検索リクエスト
+    LogService->>LogAnalyzer: ログ検索
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: 検索結果
+    LogService-->>LogAPI: 検索結果
+    LogAPI-->>UI: ログ一覧
+
+    UI->>LogAPI: ログダウンロードリクエスト
+    LogAPI->>LogService: ログダウンロードリクエスト
+    LogService->>LogAnalyzer: ログデータ取得
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: ログデータ
+    LogService-->>LogAPI: ログデータ
+    LogAPI-->>UI: ログダウンロード
 ```
 
-#### 3.1.3.4 通信プロトコル
+##### 認証フロー
 
-| コンポーネント間 | プロトコル | ポート | 認証 |
-|----------------|----------|--------|------|
-| 管理画面 ↔ 管理API | HTTPS | 443 | セッションクッキー |
-| WAFエンジン ↔ 管理API | HTTPS | 443 | APIトークン |
-| WAFエンジン ↔ ログ管理サーバ | HTTP/TCP | 24224 | なし（内部ネットワーク） |
-| バックエンド ↔ MySQL | MySQL Protocol | 3306 | ユーザー名/パスワード |
-| バックエンド ↔ Redis | Redis Protocol | 6379 | パスワード（オプション） |
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant UserAPI as ユーザー管理API
+    participant UserService as ユーザー管理サービス
+    participant DB as MySQL
+    participant Redis as Redis
+
+    UI->>UserAPI: ログインリクエスト
+    UserAPI->>UserService: 認証リクエスト
+    UserService->>DB: ユーザー情報取得
+    DB-->>UserService: ユーザー情報
+    UserService->>UserService: パスワード検証
+    UserService->>Redis: セッション作成
+    Redis-->>UserService: セッションID
+    UserService-->>UserAPI: 認証成功・セッションID
+    UserAPI-->>UI: セッションクッキー設定
+```
+
+##### シグニチャ収集フロー
+
+```mermaid
+sequenceDiagram
+    participant Batch as バッチスケジューラ
+    participant SigService as シグニチャ収集サービス
+    participant DB as MySQL
+    participant LogService as ログ管理サービス
+    participant LogAnalyzer as ログ分析エンジン
+    participant UI as 管理画面
+    participant ConfigAPI as 設定管理API
+    participant ConfigService as 設定管理サービス
+
+    Note over Batch: 毎日2時（JST）に実行
+    Batch->>SigService: シグニチャ生成バッチ起動
+    SigService->>SigService: 商用WAF機能分析
+    SigService->>SigService: 脆弱性情報収集（CVE等）
+    SigService->>SigService: シグニチャ候補生成
+    SigService->>DB: シグニチャ候補保存
+
+    Note over Batch: 検証バッチ実行
+    Batch->>SigService: シグニチャ検証バッチ起動
+    SigService->>LogService: 過去ログ取得依頼
+    LogService->>LogAnalyzer: 過去ログ取得
+    LogAnalyzer-->>LogService: 過去ログデータ
+    LogService-->>SigService: 過去ログデータ
+    SigService->>SigService: 誤検知率・検知率計算
+    SigService->>DB: 検証結果保存
+
+    Note over UI: サービス管理者による承認
+    UI->>ConfigAPI: シグニチャ候補承認リクエスト
+    ConfigAPI->>ConfigService: 承認処理リクエスト
+    ConfigService->>SigService: 承認処理
+    SigService->>DB: シグニチャ承認・有効化
+    DB-->>SigService: 更新完了
+    SigService-->>ConfigService: 承認完了
+    ConfigService-->>ConfigAPI: 承認完了
+    ConfigAPI-->>UI: 承認成功
+```
+
+##### レート制限フロー
+
+```mermaid
+sequenceDiagram
+    participant Client as クライアント
+    participant Nginx as Nginx
+    participant RateLimit as レート制限
+    participant Redis as Redis
+    participant OpenAppSec as OpenAppSec
+
+    Client->>Nginx: HTTPリクエスト
+    Nginx->>RateLimit: レート制限チェック
+    RateLimit->>Redis: トークン取得（Luaスクリプト実行）
+    Redis-->>RateLimit: トークン残数・判定結果
+    alt トークンあり（許可）
+        RateLimit-->>Nginx: 許可
+        Nginx->>OpenAppSec: リクエスト転送
+        OpenAppSec-->>Nginx: レスポンス
+        Nginx-->>Client: レスポンス
+    else トークンなし（制限）
+        RateLimit-->>Nginx: 拒否
+        Nginx-->>Client: 429 Too Many Requests
+        RateLimit->>OpenAppSec: ログ送信（初回ブロック時）
+    end
+```
+
+##### ユーザー管理フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant UserAPI as ユーザー管理API
+    participant UserService as ユーザー管理サービス
+    participant DB as MySQL
+    participant Redis as Redis
+
+    UI->>UserAPI: ユーザー作成リクエスト
+    UserAPI->>UserService: ユーザー作成
+    UserService->>DB: ユーザー情報保存
+    DB-->>UserService: 保存完了
+    UserService-->>UserAPI: 作成完了
+    UserAPI-->>UI: 作成成功
+
+    UI->>UserAPI: ユーザー更新リクエスト
+    UserAPI->>UserService: ユーザー更新
+    UserService->>DB: ユーザー情報更新
+    DB-->>UserService: 更新完了
+    UserService->>Redis: セッション無効化（必要時）
+    Redis-->>UserService: 無効化完了
+    UserService-->>UserAPI: 更新完了
+    UserAPI-->>UI: 更新成功
+
+    UI->>UserAPI: ユーザー削除リクエスト
+    UserAPI->>UserService: ユーザー削除
+    UserService->>Redis: セッション削除
+    Redis-->>UserService: 削除完了
+    UserService->>DB: ユーザー情報削除
+    DB-->>UserService: 削除完了
+    UserService-->>UserAPI: 削除完了
+    UserAPI-->>UI: 削除成功
+```
+
+#### 3.1.3.4 通信プロトコル定義
+
+本システムで使用する通信プロトコル、ポート番号、認証方式を以下に定義します。
+
+##### 通信プロトコル一覧表
+
+| 通信元 | 通信先 | プロトコル | ポート番号 | 認証方式 | 備考 |
+|--------|--------|-----------|-----------|---------|------|
+| ユーザー（ブラウザ） | 管理画面 | HTTPS | 443 | なし | 外部アクセス |
+| 管理画面 | 設定管理API | HTTPS | 443 | セッションクッキー | REST API、JSON形式 |
+| 管理画面 | ユーザー管理API | HTTPS | 443 | セッションクッキー | REST API、JSON形式 |
+| 管理画面 | ログ取得API | HTTPS | 443 | セッションクッキー | REST API、JSON形式 |
+| 設定管理API | 設定管理サービス | HTTP | 8080 | なし（内部通信） | 同一ネットワーク内、認証不要 ※本番環境ではmTLS必須 |
+| ユーザー管理API | ユーザー管理サービス | HTTP | 8081 | なし（内部通信） | 同一ネットワーク内、認証不要 ※本番環境ではmTLS必須 |
+| ログ取得API | ログ管理サービス | HTTP | 8082 | なし（内部通信） | 同一ネットワーク内、認証不要 ※本番環境ではmTLS必須 |
+| 設定管理サービス | MySQL | MySQL Protocol | 3306 | ユーザー名/パスワード | 接続プール経由 |
+| ユーザー管理サービス | MySQL | MySQL Protocol | 3306 | ユーザー名/パスワード | 接続プール経由 |
+| シグニチャ収集サービス | MySQL | MySQL Protocol | 3306 | ユーザー名/パスワード | 接続プール経由 |
+| 設定管理サービス | Redis | Redis Protocol | 6379 | パスワード（オプション） | キャッシュ、セッション |
+| ユーザー管理サービス | Redis | Redis Protocol | 6379 | パスワード（オプション） | セッション管理 |
+| ログ管理サービス | ログ分析エンジン | HTTP | 8083 | なし（内部通信） | 同一ネットワーク内、認証不要 ※本番環境ではmTLS必須 |
+| WAFエンジン（ConfigAgent） | 設定管理API | HTTPS | 443 | APIトークン | 設定取得（ポーリング/Webhook） |
+| WAFエンジン（LogAgent） | ログ収集サービス | TCP | 24224 | なし（内部通信）※本番環境ではTLS暗号化と共有キー認証を推奨 | Fluentd Forward Protocol |
+| WAFエンジン（RateLimit） | Redis | Redis Protocol | 6379 | パスワード（オプション） | レート制限カウンター |
+| ログ分析エンジン | ログ転送サービス | HTTP | 8084 | なし（内部通信） | 同一ネットワーク内、認証不要 ※本番環境ではmTLS必須 |
+| ログ転送サービス | 外部ストレージ（S3等） | HTTPS | 443 | AWS認証情報等 | ログアーカイブ |
+
+##### プロトコル詳細
+
+###### HTTPS（TLS 1.2以上）
+
+- **用途**: 外部アクセス、管理画面とAPI間の通信、WAFエンジンと管理API間の通信
+- **ポート**: 443（標準）
+- **認証**: 
+  - 管理画面 ↔ API: セッションクッキー（ログイン後に発行）
+  - WAFエンジン ↔ API: APIトークン（Authorizationヘッダー）
+- **暗号化**: TLS 1.2以上を必須とする
+- **証明書**: 有効なSSL/TLS証明書を使用（Let's Encrypt等）
+
+###### HTTP（内部通信）
+
+- **用途**: 同一ネットワーク内のサービス間通信
+- **ポート**: 
+  - API ↔ サービス: 8080-8082
+  - ログ管理サービス ↔ ログ分析エンジン: 8083
+  - ログ分析エンジン ↔ ログ転送サービス: 8084
+- **認証**: なし（内部通信のため） ※セキュリティ強化のため、mTLS（mutual TLS）等の導入を強く推奨
+- **セキュリティ**: ネットワークポリシー（Kubernetes NetworkPolicy等）でアクセス制御。Defense in Depth（多層防御）の原則に基づき、内部通信にも認証を導入することで、万が一ネットワーク内部に侵入された場合でも不正なサービス間通信を防ぐことができます。
+
+###### MySQL Protocol
+
+- **用途**: リレーショナルデータベースへの接続
+- **ポート**: 3306（標準）
+- **認証**: ユーザー名/パスワード
+- **接続方式**: 接続プール経由（HikariCP等）
+- **文字コード**: utf8mb4
+- **SSL/TLS**: 内部通信のためオプション（本番環境では推奨）
+
+###### Redis Protocol
+
+- **用途**: キャッシュ、セッション管理、レート制限カウンター
+- **ポート**: 6379（標準）
+- **認証**: パスワード認証（オプション、本番環境では推奨）
+- **接続方式**: 直接接続（接続プール使用可能）
+
+###### Fluentd Forward Protocol
+
+- **用途**: WAFエンジンからログ管理サーバへのログ転送
+- **ポート**: 24224（標準）
+- **認証**: なし（内部ネットワーク内での通信） ※本番環境ではTLS暗号化と共有キー認証の利用を強く推奨
+- **プロトコル**: TCP（Fluentd Forward ProtocolはTCP上で動作する独自のバイナリプロトコル）
+- **セキュリティ**: ネットワークポリシーでアクセス制御。本番環境ではTLS暗号化と共有キー認証の利用を推奨
+
+##### 認証方式の詳細
+
+###### セッションクッキー認証（管理画面 ↔ API）
+
+1. ユーザーが管理画面でログイン
+2. ユーザー管理サービスが認証を実行
+3. 認証成功後、セッションIDをRedisに保存
+4. セッションIDをクッキーとしてブラウザに返却
+5. 以降のリクエストでクッキーを送信して認証
+
+**セッション管理**:
+- セッション有効期限: 30分（無操作時）
+- セッションストレージ: Redis
+- セッション無効化: ログアウト時、管理者による強制無効化時
+
+###### APIトークン認証（WAFエンジン ↔ 管理API）
+
+1. WAFエンジンにAPIトークンを設定（環境変数または設定ファイル）
+2. 設定取得リクエスト時に`Authorization: Bearer <token>`ヘッダーを送信
+3. 管理APIがトークンを検証
+4. 検証成功後、設定データを返却
+
+**トークン管理**:
+- トークン生成: 管理画面から生成・発行
+- トークン有効期限: 90日（定期的なローテーションを推奨）
+- トークン権限: 設定取得のみ（読み取り専用）
+- トークンローテーション: 有効期限が近づいたら再発行を推奨
+
+##### ポート番号の割り当て
+
+| ポート番号 | 用途 | プロトコル |
+|----------|------|-----------|
+| 443 | HTTPS（外部アクセス、API） | HTTPS |
+| 3306 | MySQL | MySQL Protocol |
+| 6379 | Redis | Redis Protocol |
+| 8080 | 設定管理サービス（内部） | HTTP |
+| 8081 | ユーザー管理サービス（内部） | HTTP |
+| 8082 | ログ管理サービス（内部） | HTTP |
+| 8083 | ログ分析エンジン（内部） | HTTP |
+| 8084 | ログ転送サービス（内部） | HTTP |
+| 24224 | Fluentd Forward（ログ転送） | TCP |
+
+#### 3.1.3.6 コンポーネント間の関係性
+
+```mermaid
+graph LR
+    subgraph "外部"
+        User[ユーザー]
+        Client[クライアント]
+    end
+
+    subgraph "管理画面層"
+        AdminUI[管理画面]
+    end
+
+    subgraph "API層"
+        ConfigAPI[設定管理API]
+        UserAPI[ユーザー管理API]
+        LogAPI[ログ取得API]
+    end
+
+    subgraph "サービス層"
+        ConfigService[設定管理サービス]
+        UserService[ユーザー管理サービス]
+        LogService[ログ管理サービス]
+    end
+
+    subgraph "データ層"
+        MySQL[(MySQL)]
+        Redis[(Redis)]
+    end
+
+    subgraph "WAF層"
+        WAFEngine[WAFエンジン]
+    end
+
+    subgraph "ログ層"
+        LogServer[ログ管理サーバ]
+    end
+
+    User -->|HTTPS| AdminUI
+    Client -->|HTTP/HTTPS| WAFEngine
+
+    AdminUI -->|REST API<br/>HTTPS| ConfigAPI
+    AdminUI -->|REST API<br/>HTTPS| UserAPI
+    AdminUI -->|REST API<br/>HTTPS| LogAPI
+
+    ConfigAPI -->|内部API呼び出し| ConfigService
+    UserAPI -->|内部API呼び出し| UserService
+    LogAPI -->|内部API呼び出し| LogService
+
+    ConfigService -->|接続プール| MySQL
+    ConfigService -->|直接接続| Redis
+    UserService -->|接続プール| MySQL
+    UserService -->|直接接続| Redis
+    LogService -->|内部API呼び出し| LogServer
+
+    WAFEngine -->|REST API<br/>HTTPS<br/>設定取得| ConfigAPI
+    WAFEngine -->|直接接続<br/>レート制限| Redis
+    WAFEngine -->|TCP<br/>ログ転送<br/>Fluentd Forward Protocol| LogServer
+```
+
+**関係性の詳細:**
+
+1. **管理画面 ↔ 管理API**: REST API（HTTPS）
+   - セッションクッキーによる認証
+   - JSON形式でのデータ交換
+
+2. **管理API ↔ バックエンドサービス**: 内部API呼び出し
+   - 同一ネットワーク内での通信
+   - 認証不要（内部通信）
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
+
+3. **バックエンドサービス ↔ ログ管理サーバ**: 内部API呼び出し
+   - ログ管理サービスがログ管理サーバと連携
+   - 同一ネットワーク内での通信
+   - 認証不要（内部通信）
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
+
+4. **バックエンドサービス ↔ データストア**: 
+   - **MySQL**: 接続プール経由で接続
+   - **Redis**: 直接接続（セッション、キャッシュ、レート制限）
+
+5. **WAFエンジン ↔ 管理API**: REST API（設定取得、HTTPS）
+   - APIトークンによる認証
+   - ポーリングまたはWebhookで設定を取得
+
+6. **WAFエンジン ↔ ログ管理サーバ**: TCP（ログ転送）
+   - Fluentd Forward Protocol（TCP上で動作する独自のバイナリプロトコル）
+   - 内部ネットワーク内での通信（認証なし）※本番環境ではTLS暗号化と共有キー認証の利用を強く推奨
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提。本番環境ではTLS暗号化と共有キー認証の利用を推奨
+
+7. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
+   - Redis Protocolで直接接続
+   - レート制限カウンターの管理
+
+##### 設定配信フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant API as 管理API
+    participant Service as 設定管理サービス
+    participant DB as MySQL
+    participant ConfigAgent as 設定取得エージェント
+
+    UI->>API: シグニチャグループ設定変更
+    API->>Service: 設定更新リクエスト
+    Service->>DB: 設定を保存
+    DB-->>Service: 保存完了
+    Service-->>API: 更新完了
+    API-->>UI: 更新成功
+
+    Note over ConfigAgent: ポーリング（5分間隔）またはWebhook
+    ConfigAgent->>API: 設定取得リクエスト
+    API->>Service: 設定取得
+    Service->>DB: 設定を取得
+    DB-->>Service: 設定データ
+    Service-->>API: 設定データ
+    API-->>ConfigAgent: OpenAppSec設定形式
+    ConfigAgent->>ConfigAgent: 設定ファイル更新・リロード
+```
+
+##### ログ転送フロー
+
+```mermaid
+sequenceDiagram
+    participant OpenAppSec as OpenAppSec
+    participant LogAgent as "LogAgent (Fluentd)"
+    participant LogCollector as "ログ収集サービス"
+    participant LogAnalyzer as "ログ分析エンジン"
+    participant Storage as ローカルストレージ/S3
+
+    OpenAppSec->>LogAgent: WAF検知ログ
+    LogAgent->>LogAgent: ログパース・正規化
+    LogAgent->>LogCollector: HTTP/TCP転送
+    LogCollector->>LogAnalyzer: ログ分析
+    LogAnalyzer->>Storage: ログ保存・アーカイブ
+```
+
+##### ログ取得フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant LogAPI as ログ取得API
+    participant LogService as ログ管理サービス
+    participant LogAnalyzer as ログ分析エンジン
+    participant Storage as ローカルストレージ/S3
+
+    UI->>LogAPI: ログ検索リクエスト
+    LogAPI->>LogService: ログ検索リクエスト
+    LogService->>LogAnalyzer: ログ検索
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: 検索結果
+    LogService-->>LogAPI: 検索結果
+    LogAPI-->>UI: ログ一覧
+
+    UI->>LogAPI: ログダウンロードリクエスト
+    LogAPI->>LogService: ログダウンロードリクエスト
+    LogService->>LogAnalyzer: ログデータ取得
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: ログデータ
+    LogService-->>LogAPI: ログデータ
+    LogAPI-->>UI: ログダウンロード
+```
+
+##### 認証フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant API as 管理API
+    participant UserService as "ユーザー管理サービス(認証)"
+    participant DB as MySQL
+    participant Redis as Redis
+
+    UI->>API: ログインリクエスト
+    API->>UserService: 認証リクエスト
+    UserService->>DB: ユーザー情報取得
+    DB-->>UserService: ユーザー情報
+    UserService->>UserService: パスワード検証
+    UserService->>Redis: セッション作成
+    Redis-->>UserService: セッションID
+    UserService-->>API: 認証成功・セッションID
+    API-->>UI: セッションクッキー設定
+```
 
 #### 3.1.3.5 セキュリティ境界
 
-- **外部境界**: 管理画面へのアクセス（HTTPS必須）
-- **内部境界**: 管理API ↔ バックエンドサービス（同一ネットワーク）
-- **データ境界**: データベースアクセス（接続プール、認証必須）
+本システムのセキュリティ境界を明確に定義し、各境界でのセキュリティ要件を以下に示します。
+
+##### セキュリティ境界の定義
+
+セキュリティ境界は、システムを保護するための多層防御（Defense in Depth）の観点から、以下の3つの境界に分類されます：
+
+1. **外部境界（External Boundary）**: インターネットとシステム内部の境界
+2. **内部境界（Internal Boundary）**: システム内部のコンポーネント間の境界
+3. **データ境界（Data Boundary）**: データストアへのアクセス境界
+
+##### セキュリティ境界図
+
+```mermaid
+graph TB
+    subgraph "外部（インターネット）"
+        Internet[インターネット]
+    end
+
+    subgraph "外部境界"
+        LoadBalancer[ロードバランサー<br/>HTTPS必須]
+        WAF[WAFエンジン<br/>OpenAppSec]
+    end
+
+    subgraph "内部境界（DMZ相当）"
+        AdminUI[管理画面<br/>Web UI]
+        ConfigAPI[設定管理API]
+        UserAPI[ユーザー管理API]
+        LogAPI[ログ取得API]
+    end
+
+    subgraph "内部境界（アプリケーション層）"
+        ConfigService[設定管理サービス]
+        UserService[ユーザー管理サービス]
+        LogService[ログ管理サービス]
+        SignatureService[シグニチャ収集サービス]
+    end
+
+    subgraph "内部境界（ログ管理層）"
+        LogCollector[ログ収集サービス]
+        LogAnalyzer[ログ分析エンジン]
+        LogForwarder[ログ転送サービス]
+    end
+
+    subgraph "データ境界"
+        MySQL[(MySQL<br/>リレーショナルDB)]
+        Redis[(Redis<br/>キャッシュ・セッション)]
+        ExternalStorage[外部ストレージ<br/>S3等]
+    end
+
+    Internet -->|HTTPS<br/>TLS 1.2+<br/>証明書認証| LoadBalancer
+    LoadBalancer -->|HTTPS<br/>TLS 1.2+| WAF
+    WAF -->|HTTPS<br/>TLS 1.2+| AdminUI
+
+    AdminUI -->|HTTPS<br/>TLS 1.2+<br/>セッションクッキー認証| ConfigAPI
+    AdminUI -->|HTTPS<br/>TLS 1.2+<br/>セッションクッキー認証| UserAPI
+    AdminUI -->|HTTPS<br/>TLS 1.2+<br/>セッションクッキー認証| LogAPI
+
+    ConfigAPI -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| ConfigService
+    UserAPI -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| UserService
+    LogAPI -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| LogService
+
+    ConfigService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
+    UserService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
+    SignatureService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
+
+    ConfigService -->|Redis Protocol<br/>パスワード認証推奨<br/>SSL/TLS推奨| Redis
+    UserService -->|Redis Protocol<br/>パスワード認証推奨<br/>SSL/TLS推奨| Redis
+
+    LogService -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| LogCollector
+    LogCollector -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| LogAnalyzer
+    LogAnalyzer -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| LogForwarder
+    LogForwarder -->|HTTPS<br/>AWS認証情報| ExternalStorage
+
+    WAF -->|HTTPS<br/>APIトークン認証| ConfigAPI
+    WAF -->|TCP<br/>TLS推奨<br/>共有キー認証推奨| LogCollector
+    WAF -->|Redis Protocol<br/>パスワード認証推奨<br/>SSL/TLS推奨| Redis
+
+    style Internet fill:#ffcccc
+    style LoadBalancer fill:#ffffcc
+    style WAF fill:#ffffcc
+    style AdminUI fill:#ccffcc
+    style ConfigAPI fill:#ccffcc
+    style UserAPI fill:#ccffcc
+    style LogAPI fill:#ccffcc
+    style ConfigService fill:#ccccff
+    style UserService fill:#ccccff
+    style LogService fill:#ccccff
+    style MySQL fill:#ffccff
+    style Redis fill:#ffccff
+    style ExternalStorage fill:#ffccff
+```
+
+**凡例**:
+- 🔴 **赤色**: 外部（インターネット）
+- 🟡 **黄色**: 外部境界（DMZ相当）
+- 🟢 **緑色**: 内部境界（DMZ相当: 管理画面・API層）
+- 🔵 **青色**: 内部境界（アプリケーション層・ログ管理層）
+- 🟣 **紫色**: データ境界
+
+##### 外部境界（External Boundary）
+
+**定義**: インターネットとシステム内部の境界。外部からのアクセスを制御する最初の防御層。
+
+**対象コンポーネント**:
+- ロードバランサー
+- WAFエンジン（OpenAppSec）
+- 管理画面（Web UI）
+
+**セキュリティ要件**:
+
+1. **通信の暗号化**
+   - **必須**: HTTPS（TLS 1.2以上）を使用
+   - **証明書**: 有効なSSL/TLS証明書を使用（Let's Encrypt等）
+   - **証明書の検証**: クライアント側で証明書の検証を必須とする
+
+2. **アクセス制御**
+   - **WAFエンジン**: すべてのHTTP/HTTPSリクエストを検査し、攻撃を検知・防御
+   - **レート制限**: DDoS攻撃対策としてレート制限を実装
+   - **IP AllowList**: 管理画面へのアクセスを特定のIPアドレスに制限（オプション）
+
+3. **認証・認可**
+   - **管理画面**: セッションクッキーによる認証（ログイン必須）
+   - **API**: セッションクッキーまたはAPIトークンによる認証
+   - **WAFエンジン**: APIトークンによる認証（設定取得時）
+
+4. **ログ・監視**
+   - すべての外部アクセスをログに記録
+   - 異常なアクセスパターンを検知・アラート
+
+##### 内部境界（Internal Boundary）
+
+**定義**: システム内部のコンポーネント間の境界。内部ネットワーク内での通信を制御する防御層。
+
+**対象コンポーネント**:
+- **管理API ↔ バックエンドサービス**:
+  - 設定管理API ↔ 設定管理サービス
+  - ユーザー管理API ↔ ユーザー管理サービス
+  - ログ取得API ↔ ログ管理サービス
+- **バックエンドサービス ↔ ログ管理サーバ**:
+  - ログ管理サービス ↔ ログ収集サービス
+  - ログ収集サービス ↔ ログ分析エンジン
+  - ログ分析エンジン ↔ ログ転送サービス
+- **WAFエンジン ↔ ログ管理サーバ**:
+  - WAFエンジン（LogAgent） ↔ ログ収集サービス
+
+**セキュリティ要件**:
+
+1. **ネットワーク分離**
+   - **必須**: 同一ネットワーク内での通信（VPC、Kubernetesクラスタ内等）
+   - **ネットワークポリシー**: Kubernetes NetworkPolicy等でアクセス制御
+   - **セグメンテーション**: 必要に応じてネットワークセグメントを分離
+
+2. **通信の暗号化**
+   - **推奨**: mTLS（mutual TLS）による相互認証
+   - **本番環境**: mTLSを必須とする
+   - **開発環境**: ネットワークポリシーによる保護を前提とする
+
+3. **認証・認可**
+   - **本番環境**: mTLSまたはJWTトークンによるサービス間認証を必須とする
+   - **開発環境**: ネットワークポリシーによる保護を前提とする
+   - **サービス間通信**: サービスメッシュ（Istio等）の導入を検討
+
+4. **アクセス制御**
+   - **最小権限の原則**: 各サービスは必要最小限の権限のみを持つ
+   - **ネットワークポリシー**: 許可されたコンポーネント間のみ通信を許可
+   - **ファイアウォール**: 必要に応じて内部ファイアウォールを設定
+
+##### データ境界（Data Boundary）
+
+**定義**: データストアへのアクセス境界。機密データを保護する最後の防御層。
+
+**対象コンポーネント**:
+- MySQL（リレーショナルデータベース）
+- Redis（キャッシュ・セッションストア）
+- 外部ストレージ（S3等）
+
+**セキュリティ要件**:
+
+1. **アクセス制御**
+   - **必須**: ユーザー名/パスワードによる認証
+   - **最小権限の原則**: 各サービスは必要最小限のデータベース権限のみを持つ
+   - **接続プール**: 接続プール経由でアクセス（HikariCP等）
+
+2. **通信の暗号化**
+   - **推奨**: SSL/TLSによる通信の暗号化（本番環境では必須）
+   - **MySQL**: SSL/TLS接続を推奨（本番環境では必須）
+   - **Redis**: SSL/TLSによる通信の暗号化を推奨（本番環境では必須）、パスワード認証も推奨（本番環境では必須）
+
+3. **データ保護**
+   - **暗号化**: 機密データ（パスワード、APIトークン等）は暗号化して保存
+   - **バックアップ**: バックアップデータも暗号化して保存
+   - **アクセスログ**: すべてのデータアクセスをログに記録
+
+4. **ネットワーク分離**
+   - **必須**: データベースは内部ネットワーク内でのみアクセス可能
+   - **外部アクセス**: 外部からの直接アクセスは禁止
+   - **管理アクセス**: 管理用アクセスはVPN経由等で制限
+
+##### セキュリティ境界間の通信要件
+
+| 境界間 | 通信方式 | 認証方式 | 暗号化 | 備考 |
+|--------|---------|---------|--------|------|
+| 外部 → 外部境界 | HTTPS | 証明書認証 | TLS 1.2+ | 必須 |
+| 外部境界 → 内部境界 | HTTPS | セッションクッキー/APIトークン | TLS 1.2+ | 必須 |
+| 内部境界 → 内部境界 | HTTPS | mTLS推奨 | TLS 1.2+ (mTLS推奨) | 本番環境ではmTLS必須 |
+| 内部境界 → データ境界 | MySQL/Redis Protocol | ユーザー名/パスワード | SSL/TLS推奨 | 本番環境ではSSL/TLS必須 |
+| データ境界 → 外部ストレージ | HTTPS | AWS認証情報等 | TLS 1.2+ | 必須 |
+
+##### セキュリティ対策の実装方針
+
+1. **多層防御（Defense in Depth）**
+   - 単一のセキュリティ対策に依存せず、複数の防御層を実装
+   - 各境界で独立したセキュリティ対策を実装
+
+2. **最小権限の原則（Principle of Least Privilege）**
+   - 各コンポーネントは必要最小限の権限のみを持つ
+   - データベースアクセス権限を最小限に制限
+
+3. **監視・ログ**
+   - すべての境界を越える通信をログに記録
+   - 異常なアクセスパターンを検知・アラート
+
+4. **定期的なセキュリティ監査**
+   - セキュリティ境界の設定を定期的に監査
+   - 脆弱性スキャンを定期的に実施
 
 ### 3.1.4 マイクロサービス/モノリスの選択
 
