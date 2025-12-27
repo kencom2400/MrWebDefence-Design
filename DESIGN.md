@@ -635,13 +635,13 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant WAF as WAFエンジン
+    participant OpenAppSec as OpenAppSec
     participant LogAgent as "LogAgent (Fluentd)"
     participant LogCollector as "ログ収集サービス"
     participant LogAnalyzer as "ログ分析エンジン"
     participant Storage as ローカルストレージ/S3
 
-    WAF->>LogAgent: WAF検知ログ
+    OpenAppSec->>LogAgent: WAF検知ログ
     LogAgent->>LogAgent: ログパース・正規化
     LogAgent->>LogCollector: HTTP/TCP転送
     LogCollector->>LogAnalyzer: ログ分析
