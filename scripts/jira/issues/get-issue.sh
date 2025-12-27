@@ -49,17 +49,9 @@ if [ $API_CALL_EXIT -eq 0 ] && echo "$ISSUE_INFO" | jq -e . >/dev/null 2>&1; the
   # 親タスク情報の取得
   PARENT_SUMMARY=""
   PARENT_TYPE=""
-  if [ -n "$PARENT_KEY" ] && [ "$PARENT_KEY" != "null" ] && [ "$PARENT_KEY" != "" ]; then
+  if [ -n "$PARENT_KEY" ]; then
     PARENT_SUMMARY=$(echo "$ISSUE_INFO" | jq -r '.fields.parent.fields.summary // empty' 2>/dev/null || echo "")
     PARENT_TYPE=$(echo "$ISSUE_INFO" | jq -r '.fields.parent.fields.issuetype.name // empty' 2>/dev/null || echo "")
-    
-    # nullチェック
-    if [ "$PARENT_SUMMARY" = "null" ] || [ -z "$PARENT_SUMMARY" ]; then
-      PARENT_SUMMARY=""
-    fi
-    if [ "$PARENT_TYPE" = "null" ] || [ -z "$PARENT_TYPE" ]; then
-      PARENT_TYPE=""
-    fi
   fi
   
   echo "✅ Issueキー: $ISSUE_KEY"
@@ -68,12 +60,12 @@ if [ $API_CALL_EXIT -eq 0 ] && echo "$ISSUE_INFO" | jq -e . >/dev/null 2>&1; the
   echo "✅ ステータス: $ISSUE_STATUS"
   
   # 親タスク情報を表示（set +eの範囲内で実行）
-  if [ -n "$PARENT_KEY" ] && [ "$PARENT_KEY" != "null" ] && [ "$PARENT_KEY" != "" ]; then
+  if [ -n "$PARENT_KEY" ]; then
     echo "✅ 親タスク: $PARENT_KEY"
-    if [ -n "$PARENT_SUMMARY" ] && [ "$PARENT_SUMMARY" != "null" ] && [ "$PARENT_SUMMARY" != "" ]; then
+    if [ -n "$PARENT_SUMMARY" ]; then
       echo "   タイトル: $PARENT_SUMMARY"
     fi
-    if [ -n "$PARENT_TYPE" ] && [ "$PARENT_TYPE" != "null" ] && [ "$PARENT_TYPE" != "" ]; then
+    if [ -n "$PARENT_TYPE" ]; then
       echo "   Issue種別: $PARENT_TYPE"
     fi
   fi
