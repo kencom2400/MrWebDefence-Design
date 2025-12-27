@@ -147,7 +147,7 @@ Backlog → To Do → In Progress → Done
 - **Backlog**: チケット作成時（自動設定）
 - **To Do**: 次に取り組むチケットとして選択した時
 - **In Progress**: 実際の作業を開始した時
-- **Done**: 作業が完了し、PRがマージされた時
+- **Done**: 作業が完了し、PRがマージされた時（Jira側でPRマージと連動するため、手動での変更は不要）
 
 ## 3. フィールド定義の取得方法
 
@@ -214,6 +214,31 @@ GET /rest/api/3/issue/createmeta?projectKeys={projectKey}&expand=projects.issuet
   --status Backlog \
   --project-key TEST
 ```
+
+#### 方法4: Epicを親に指定してTask/Bug/Storyを作成（自動紐づけ）
+
+```bash
+# Epicを親に指定してTaskを作成（自動的にEpicに紐づけ）
+./scripts/jira/issues/create-issue.sh \
+  --title "Task 3.1: ユーザー認証機能実装" \
+  --issue-type Task \
+  --parent MWD-3 \
+  --status ToDo \
+  --project-key MWD
+
+# Epicを親に指定してBugを作成（自動的にEpicに紐づけ）
+./scripts/jira/issues/create-issue.sh \
+  --title "[bug] ログインエラー" \
+  --issue-type Bug \
+  --parent MWD-3 \
+  --status ToDo \
+  --project-key MWD
+```
+
+**自動紐づけの条件:**
+- 親タスクがEpicである（`--parent`で指定）
+- 作成するIssueTypeがBug, Story, Taskのいずれかである
+- 上記の条件を満たす場合、Issue作成後に自動的にEpicに紐づけられます
 
 **詳細**: `./scripts/jira/issues/create-issue.README.md`
 
@@ -450,25 +475,29 @@ source scripts/jira/config.sh
 
 `@start-task`コマンドの実行時は、以下の理由から**必ず`required_permissions: ['all']`を指定**してください：
 
-1. **Jira API呼び出し**: Issue情報の取得、ステータス遷移
-2. **Git操作**: ブランチの作成、チェックアウト
-3. **証明書検証**: HTTPSでのJira接続
+1. **API呼び出し**: Issue情報の取得、ステータス遷移（GitHub API / Jira API）
+2. **Git操作**: ブランチの作成、チェックアウト、プル
+3. **ネットワーク接続**: HTTPSでのAPI接続、証明書検証
 
 **サンドボックス環境ではこれらの操作がエラーになるため、最初からall権限で実行すること。**
 
 ```typescript
 // ✅ 正しい実行方法（Jiraプロジェクトの場合）
 run_terminal_cmd({
-  command: './scripts/jira/workflow/start-task.sh',
+  command: 'bash scripts/jira/workflow/start-task.sh',
   required_permissions: ['all'],
 });
 
 // ✅ 正しい実行方法（GitHubプロジェクトの場合）
 run_terminal_cmd({
-  command: './scripts/github/workflow/start-task.sh',
+  command: 'bash scripts/github/workflow/start-task.sh',
   required_permissions: ['all'],
 });
 ```
+
+**🚨 CRITICAL: AIアシスタントへの指示**
+
+`@start-task`コマンドを受け取った際は、**必ず`required_permissions: ['all']`を指定して実行**してください。これは必須事項です。
 
 **実行内容:**
 
@@ -492,7 +521,9 @@ run_terminal_cmd({
    - ソート後の最初のIssueを選択
    - Issueの詳細を表示
    - mainブランチを最新化してからブランチを作成
-   - **JiraのステータスをIn Progressに変更**
+   - **🚨 CRITICAL: JiraのステータスをIn Progressに変更（必須）**
+     - チケット開始時には必ずステータスを「In Progress」（日本語: 「進行中」）に変更すること
+     - ステータス変更に失敗した場合は警告を表示するが、作業は継続可能
    - Issueの内容に従って作業を即座に開始
 
 ### ✨ 新機能: start-task.sh スクリプト（Jira版）
@@ -535,7 +566,8 @@ Jira統合で実装された`start-task.sh`スクリプトを使用して、Issu
 2. 自分にアサイン（未アサインの場合）
 3. mainブランチの最新化
 4. フィーチャーブランチの作成（`feature/{ISSUE_KEY}-{タイトル}`）
-5. JiraでステータスをIn Progressに変更
+5. **🚨 CRITICAL: JiraでステータスをIn Progressに変更（必須）**
+   - **詳細**: `.cursor/rules/00-workflow-checklist.d/02-task-start.md`の「🚨 CRITICAL: 必ずステータスを「In Progress」に変更」を参照
 
 #### エラーハンドリング
 
