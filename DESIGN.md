@@ -730,7 +730,7 @@ sequenceDiagram
 | ユーザー管理サービス | Redis | Redis Protocol | 6379 | パスワード（オプション） | セッション管理 |
 | ログ管理サービス | ログ分析エンジン | HTTP | 8083 | なし（内部通信） | 同一ネットワーク内、認証不要 |
 | WAFエンジン（ConfigAgent） | 設定管理API | HTTPS | 443 | APIトークン | 設定取得（ポーリング/Webhook） |
-| WAFエンジン（LogAgent） | ログ収集サービス | HTTP/TCP | 24224 | なし（内部通信） | Fluentd Forward Protocol |
+| WAFエンジン（LogAgent） | ログ収集サービス | TCP | 24224 | なし（内部通信）※本番環境ではTLS暗号化と共有キー認証を推奨 | Fluentd Forward Protocol |
 | WAFエンジン（RateLimit） | Redis | Redis Protocol | 6379 | パスワード（オプション） | レート制限カウンター |
 | ログ分析エンジン | ログ転送サービス | HTTP | 8084 | なし（内部通信） | 同一ネットワーク内、認証不要 |
 | ログ転送サービス | 外部ストレージ（S3等） | HTTPS | 443 | AWS認証情報等 | ログアーカイブ |
@@ -754,8 +754,8 @@ sequenceDiagram
   - API ↔ サービス: 8080-8082
   - ログ管理サービス ↔ ログ分析エンジン: 8083
   - ログ分析エンジン ↔ ログ転送サービス: 8084
-- **認証**: なし（内部通信のため）
-- **セキュリティ**: ネットワークポリシー（Kubernetes NetworkPolicy等）でアクセス制御
+- **認証**: なし（内部通信のため） ※セキュリティ強化のため、mTLS（mutual TLS）等の導入を強く推奨
+- **セキュリティ**: ネットワークポリシー（Kubernetes NetworkPolicy等）でアクセス制御。Defense in Depth（多層防御）の原則に基づき、内部通信にも認証を導入することで、万が一ネットワーク内部に侵入された場合でも不正なサービス間通信を防ぐことができます。
 
 ###### MySQL Protocol
 
@@ -777,9 +777,9 @@ sequenceDiagram
 
 - **用途**: WAFエンジンからログ管理サーバへのログ転送
 - **ポート**: 24224（標準）
-- **認証**: なし（内部ネットワーク内での通信）
-- **プロトコル**: HTTP/TCP
-- **セキュリティ**: ネットワークポリシーでアクセス制御
+- **認証**: なし（内部ネットワーク内での通信） ※本番環境ではTLS暗号化と共有キー認証の利用を強く推奨
+- **プロトコル**: TCP（Fluentd Forward ProtocolはTCP上で動作する独自のバイナリプロトコル）
+- **セキュリティ**: ネットワークポリシーでアクセス制御。本番環境ではTLS暗号化と共有キー認証の利用を推奨
 
 ##### 認証方式の詳細
 
@@ -805,8 +805,9 @@ sequenceDiagram
 
 **トークン管理**:
 - トークン生成: 管理画面から生成・発行
-- トークン有効期限: 無期限（手動で無効化可能）
+- トークン有効期限: 90日（定期的なローテーションを推奨）
 - トークン権限: 設定取得のみ（読み取り専用）
+- トークンローテーション: 有効期限が近づいたら再発行を推奨
 
 ##### ポート番号の割り当て
 
@@ -820,7 +821,7 @@ sequenceDiagram
 | 8082 | ログ管理サービス（内部） | HTTP |
 | 8083 | ログ分析エンジン（内部） | HTTP |
 | 8084 | ログ転送サービス（内部） | HTTP |
-| 24224 | Fluentd Forward（ログ転送） | HTTP/TCP |
+| 24224 | Fluentd Forward（ログ転送） | TCP |
 
 #### 3.1.3.5 コンポーネント間の関係性
 
@@ -879,7 +880,7 @@ graph LR
 
     WAFEngine -->|REST API<br/>HTTPS<br/>設定取得| ConfigAPI
     WAFEngine -->|直接接続<br/>レート制限| Redis
-    WAFEngine -->|HTTP/TCP<br/>ログ転送| LogServer
+    WAFEngine -->|TCP<br/>ログ転送<br/>Fluentd Forward Protocol| LogServer
 ```
 
 **関係性の詳細:**
@@ -907,10 +908,10 @@ graph LR
    - APIトークンによる認証
    - ポーリングまたはWebhookで設定を取得
 
-6. **WAFエンジン ↔ ログ管理サーバ**: HTTP/TCP（ログ転送）
-   - Fluentd Forward Protocol
-   - 内部ネットワーク内での通信（認証なし）
-   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
+6. **WAFエンジン ↔ ログ管理サーバ**: TCP（ログ転送）
+   - Fluentd Forward Protocol（TCP上で動作する独自のバイナリプロトコル）
+   - 内部ネットワーク内での通信（認証なし）※本番環境ではTLS暗号化と共有キー認証の利用を強く推奨
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提。本番環境ではTLS暗号化と共有キー認証の利用を推奨
 
 7. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
    - Redis Protocolで直接接続
