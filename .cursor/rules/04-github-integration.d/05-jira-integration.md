@@ -147,10 +147,7 @@ Backlog → To Do → In Progress → Done
 - **Backlog**: チケット作成時（自動設定）
 - **To Do**: 次に取り組むチケットとして選択した時
 - **In Progress**: 実際の作業を開始した時
-- **Done**: 作業が完了し、PRがマージされた時
-  - **🚨 CRITICAL: PRマージ時には必ずJiraチケットのステータスを「Done」に変更すること**
-  - スクリプトを使用: `bash scripts/jira/workflow/set-issue-done-on-merge.sh <PR_NUMBER> [ISSUE_KEY]`
-  - IssueキーはPRのタイトルまたはブランチ名から自動抽出される
+- **Done**: 作業が完了し、PRがマージされた時（Jira側でPRマージと連動するため、手動での変更は不要）
 
 ## 3. フィールド定義の取得方法
 
