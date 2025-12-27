@@ -508,7 +508,200 @@ graph TB
 - **ログ転送サービス**: ログを外部システムに転送
   - S3へのアーカイブ、Splunk/Datadogへの転送（将来拡張）
 
-#### 3.1.3.3 コンポーネント間の関係性
+#### 3.1.3.3 データフロー
+
+##### 設定配信フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant API as 管理API
+    participant Service as 設定管理サービス
+    participant DB as MySQL
+    participant ConfigAgent as 設定取得エージェント
+
+    UI->>API: シグニチャグループ設定変更
+    API->>Service: 設定更新リクエスト
+    Service->>DB: 設定を保存
+    DB-->>Service: 保存完了
+    Service-->>API: 更新完了
+    API-->>UI: 更新成功
+
+    Note over ConfigAgent: ポーリング（5分間隔）またはWebhook
+    ConfigAgent->>API: 設定取得リクエスト
+    API->>Service: 設定取得
+    Service->>DB: 設定を取得
+    DB-->>Service: 設定データ
+    Service-->>API: 設定データ
+    API-->>ConfigAgent: OpenAppSec設定形式
+    ConfigAgent->>ConfigAgent: 設定ファイル更新・リロード
+```
+
+##### ログ転送フロー
+
+```mermaid
+sequenceDiagram
+    participant OpenAppSec as OpenAppSec
+    participant LogAgent as "LogAgent (Fluentd)"
+    participant LogCollector as "ログ収集サービス"
+    participant LogAnalyzer as "ログ分析エンジン"
+    participant Storage as ローカルストレージ/S3
+
+    OpenAppSec->>LogAgent: WAF検知ログ
+    LogAgent->>LogAgent: ログパース・正規化
+    LogAgent->>LogCollector: HTTP/TCP転送
+    LogCollector->>LogAnalyzer: ログ分析
+    LogAnalyzer->>Storage: ログ保存・アーカイブ
+```
+
+##### ログ取得フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant LogAPI as ログ取得API
+    participant LogService as ログ管理サービス
+    participant LogAnalyzer as ログ分析エンジン
+    participant Storage as ローカルストレージ/S3
+
+    UI->>LogAPI: ログ検索リクエスト
+    LogAPI->>LogService: ログ検索リクエスト
+    LogService->>LogAnalyzer: ログ検索
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: 検索結果
+    LogService-->>LogAPI: 検索結果
+    LogAPI-->>UI: ログ一覧
+
+    UI->>LogAPI: ログダウンロードリクエスト
+    LogAPI->>LogService: ログダウンロードリクエスト
+    LogService->>LogAnalyzer: ログデータ取得
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: ログデータ
+    LogService-->>LogAPI: ログデータ
+    LogAPI-->>UI: ログダウンロード
+```
+
+##### 認証フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant API as 管理API
+    participant UserService as "ユーザー管理サービス(認証)"
+    participant DB as MySQL
+    participant Redis as Redis
+
+    UI->>API: ログインリクエスト
+    API->>UserService: 認証リクエスト
+    UserService->>DB: ユーザー情報取得
+    DB-->>UserService: ユーザー情報
+    UserService->>UserService: パスワード検証
+    UserService->>Redis: セッション作成
+    Redis-->>UserService: セッションID
+    UserService-->>API: 認証成功・セッションID
+    API-->>UI: セッションクッキー設定
+```
+
+##### シグニチャ収集フロー
+
+```mermaid
+sequenceDiagram
+    participant Batch as バッチスケジューラ
+    participant SigService as シグニチャ収集サービス
+    participant DB as MySQL
+    participant LogAnalyzer as ログ分析エンジン
+    participant UI as 管理画面
+    participant API as 管理API
+
+    Note over Batch: 毎日2時（JST）に実行
+    Batch->>SigService: シグニチャ生成バッチ起動
+    SigService->>SigService: 商用WAF機能分析
+    SigService->>SigService: 脆弱性情報収集（CVE等）
+    SigService->>SigService: シグニチャ候補生成
+    SigService->>DB: シグニチャ候補保存
+
+    Note over Batch: 検証バッチ実行
+    Batch->>SigService: シグニチャ検証バッチ起動
+    SigService->>LogAnalyzer: 過去ログ取得
+    LogAnalyzer-->>SigService: 過去ログデータ
+    SigService->>SigService: 誤検知率・検知率計算
+    SigService->>DB: 検証結果保存
+
+    Note over UI: サービス管理者による承認
+    UI->>API: シグニチャ候補承認リクエスト
+    API->>SigService: 承認処理
+    SigService->>DB: シグニチャ承認・有効化
+    DB-->>SigService: 更新完了
+    SigService-->>API: 承認完了
+    API-->>UI: 承認成功
+```
+
+##### レート制限フロー
+
+```mermaid
+sequenceDiagram
+    participant Client as クライアント
+    participant Nginx as Nginx
+    participant RateLimit as レート制限
+    participant Redis as Redis
+    participant OpenAppSec as OpenAppSec
+
+    Client->>Nginx: HTTPリクエスト
+    Nginx->>RateLimit: レート制限チェック
+    RateLimit->>Redis: トークン取得（Luaスクリプト実行）
+    Redis-->>RateLimit: トークン残数・判定結果
+    
+    alt トークンあり（許可）
+        RateLimit-->>Nginx: 許可
+        Nginx->>OpenAppSec: リクエスト転送
+        OpenAppSec-->>Nginx: レスポンス
+        Nginx-->>Client: レスポンス
+    else トークンなし（制限）
+        RateLimit-->>Nginx: 拒否
+        Nginx-->>Client: 429 Too Many Requests
+        RateLimit->>OpenAppSec: ログ送信（初回ブロック時）
+    end
+```
+
+##### ユーザー管理フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant API as ユーザー管理API
+    participant UserService as ユーザー管理サービス
+    participant DB as MySQL
+    participant Redis as Redis
+
+    UI->>API: ユーザー作成リクエスト
+    API->>UserService: ユーザー作成
+    UserService->>DB: ユーザー情報保存
+    DB-->>UserService: 保存完了
+    UserService-->>API: 作成完了
+    API-->>UI: 作成成功
+
+    UI->>API: ユーザー更新リクエスト
+    API->>UserService: ユーザー更新
+    UserService->>DB: ユーザー情報更新
+    DB-->>UserService: 更新完了
+    UserService->>Redis: セッション無効化（必要時）
+    Redis-->>UserService: 無効化完了
+    UserService-->>API: 更新完了
+    API-->>UI: 更新成功
+
+    UI->>API: ユーザー削除リクエスト
+    API->>UserService: ユーザー削除
+    UserService->>Redis: セッション削除
+    Redis-->>UserService: 削除完了
+    UserService->>DB: ユーザー情報削除
+    DB-->>UserService: 削除完了
+    UserService-->>API: 削除完了
+    API-->>UI: 削除成功
+```
+
+#### 3.1.3.4 コンポーネント間の関係性
 
 ```mermaid
 graph LR
@@ -601,8 +794,6 @@ graph LR
 7. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
    - Redis Protocolで直接接続
    - レート制限カウンターの管理
-
-#### 3.1.3.4 データフロー
 
 ##### 設定配信フロー
 
