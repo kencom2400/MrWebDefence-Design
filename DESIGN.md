@@ -405,6 +405,7 @@ graph TB
         ConfigService[設定管理サービス]
         SignatureService[シグニチャ収集サービス]
         UserService[ユーザー管理サービス]
+        LogService[ログ管理サービス]
     end
 
     subgraph "データストア"
@@ -432,13 +433,14 @@ graph TB
 
     ConfigAPI --> ConfigService
     UserAPI --> UserService
-    LogAPI --> LogAnalyzer
+    LogAPI --> LogService
 
     ConfigService --> MySQL
     ConfigService --> Redis
     SignatureService --> MySQL
     UserService --> MySQL
     UserService --> Redis
+    LogService --> LogAnalyzer
 
     ConfigAgent -->|HTTPS<br/>設定取得| ConfigAPI
     Nginx --> OpenAppSec
@@ -477,6 +479,8 @@ graph TB
   - シグニチャ候補の生成、検証バッチ実行、承認ワークフロー
 - **ユーザー管理サービス**: ユーザーと顧客の管理
   - ユーザーCRUD、顧客CRUD、認証・認可ロジック
+- **ログ管理サービス**: ログの取得・検索・ダウンロードを管理
+  - ログ管理サーバとの連携、ログ検索、ログダウンロード
 
 ##### データストア
 - **MySQL**: 永続的なデータを保存
@@ -526,6 +530,7 @@ graph LR
     subgraph "サービス層"
         ConfigService[設定管理サービス]
         UserService[ユーザー管理サービス]
+        LogService[ログ管理サービス]
     end
 
     subgraph "データ層"
@@ -550,12 +555,13 @@ graph LR
 
     ConfigAPI -->|内部API呼び出し| ConfigService
     UserAPI -->|内部API呼び出し| UserService
-    LogAPI -->|内部API呼び出し| LogServer
+    LogAPI -->|内部API呼び出し| LogService
 
     ConfigService -->|接続プール| MySQL
     ConfigService -->|直接接続| Redis
     UserService -->|接続プール| MySQL
     UserService -->|直接接続| Redis
+    LogService -->|内部API呼び出し| LogServer
 
     WAFEngine -->|REST API<br/>HTTPS<br/>設定取得| ConfigAPI
     WAFEngine -->|直接接続<br/>レート制限| Redis
@@ -573,20 +579,26 @@ graph LR
    - 認証不要（内部通信）
    - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
 
-3. **バックエンドサービス ↔ データストア**: 
+3. **バックエンドサービス ↔ ログ管理サーバ**: 内部API呼び出し
+   - ログ管理サービスがログ管理サーバと連携
+   - 同一ネットワーク内での通信
+   - 認証不要（内部通信）
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
+
+4. **バックエンドサービス ↔ データストア**: 
    - **MySQL**: 接続プール経由で接続
    - **Redis**: 直接接続（セッション、キャッシュ、レート制限）
 
-4. **WAFエンジン ↔ 管理API**: REST API（設定取得、HTTPS）
+5. **WAFエンジン ↔ 管理API**: REST API（設定取得、HTTPS）
    - APIトークンによる認証
    - ポーリングまたはWebhookで設定を取得
 
-5. **WAFエンジン ↔ ログ管理サーバ**: HTTP/TCP（ログ転送）
+6. **WAFエンジン ↔ ログ管理サーバ**: HTTP/TCP（ログ転送）
    - Fluentd Forward Protocol
    - 内部ネットワーク内での通信（認証なし）
    - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
 
-6. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
+7. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
    - Redis Protocolで直接接続
    - レート制限カウンターの管理
 
@@ -600,7 +612,7 @@ sequenceDiagram
     participant API as 管理API
     participant Service as 設定管理サービス
     participant DB as MySQL
-    participant WAF as WAFエンジン
+    participant ConfigAgent as 設定取得エージェント
 
     UI->>API: シグニチャグループ設定変更
     API->>Service: 設定更新リクエスト
@@ -609,14 +621,14 @@ sequenceDiagram
     Service-->>API: 更新完了
     API-->>UI: 更新成功
 
-    Note over WAF: ポーリング（5分間隔）またはWebhook
-    WAF->>API: 設定取得リクエスト
+    Note over ConfigAgent: ポーリング（5分間隔）またはWebhook
+    ConfigAgent->>API: 設定取得リクエスト
     API->>Service: 設定取得
     Service->>DB: 設定を取得
     DB-->>Service: 設定データ
     Service-->>API: 設定データ
-    API-->>WAF: OpenAppSec設定形式
-    WAF->>WAF: 設定ファイル更新・リロード
+    API-->>ConfigAgent: OpenAppSec設定形式
+    ConfigAgent->>ConfigAgent: 設定ファイル更新・リロード
 ```
 
 ##### ログ転送フロー
@@ -634,6 +646,35 @@ sequenceDiagram
     LogAgent->>LogCollector: HTTP/TCP転送
     LogCollector->>LogAnalyzer: ログ分析
     LogAnalyzer->>Storage: ログ保存・アーカイブ
+```
+
+##### ログ取得フロー
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理画面
+    participant LogAPI as ログ取得API
+    participant LogService as ログ管理サービス
+    participant LogAnalyzer as ログ分析エンジン
+    participant Storage as ローカルストレージ/S3
+
+    UI->>LogAPI: ログ検索リクエスト
+    LogAPI->>LogService: ログ検索リクエスト
+    LogService->>LogAnalyzer: ログ検索
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: 検索結果
+    LogService-->>LogAPI: 検索結果
+    LogAPI-->>UI: ログ一覧
+
+    UI->>LogAPI: ログダウンロードリクエスト
+    LogAPI->>LogService: ログダウンロードリクエスト
+    LogService->>LogAnalyzer: ログデータ取得
+    LogAnalyzer->>Storage: ログデータ取得
+    Storage-->>LogAnalyzer: ログデータ
+    LogAnalyzer-->>LogService: ログデータ
+    LogService-->>LogAPI: ログデータ
+    LogAPI-->>UI: ログダウンロード
 ```
 
 ##### 認証フロー
