@@ -147,6 +147,9 @@ Backlog → To Do → In Progress → Done
 - **Backlog**: チケット作成時（自動設定）
 - **To Do**: 次に取り組むチケットとして選択した時
 - **In Progress**: 実際の作業を開始した時
+  - **🚨 CRITICAL: `@start-task`コマンド実行時には必ずステータスを「In Progress」に変更すること**
+  - チケット開始時には必ずステータスを「In Progress」（日本語: 「進行中」）に変更すること
+  - ステータス変更に失敗した場合は警告を表示するが、作業は継続可能
 - **Done**: 作業が完了し、PRがマージされた時
 
 ## 3. フィールド定義の取得方法
@@ -215,6 +218,31 @@ GET /rest/api/3/issue/createmeta?projectKeys={projectKey}&expand=projects.issuet
   --project-key TEST
 ```
 
+#### 方法4: Epicを親に指定してTask/Bug/Storyを作成（自動紐づけ）
+
+```bash
+# Epicを親に指定してTaskを作成（自動的にEpicに紐づけ）
+./scripts/jira/issues/create-issue.sh \
+  --title "Task 3.1: ユーザー認証機能実装" \
+  --issue-type Task \
+  --parent MWD-3 \
+  --status ToDo \
+  --project-key MWD
+
+# Epicを親に指定してBugを作成（自動的にEpicに紐づけ）
+./scripts/jira/issues/create-issue.sh \
+  --title "[bug] ログインエラー" \
+  --issue-type Bug \
+  --parent MWD-3 \
+  --status ToDo \
+  --project-key MWD
+```
+
+**自動紐づけの条件:**
+- 親タスクがEpicである（`--parent`で指定）
+- 作成するIssueTypeがBug, Story, Taskのいずれかである
+- 上記の条件を満たす場合、Issue作成後に自動的にEpicに紐づけられます
+
 **詳細**: `./scripts/jira/issues/create-issue.README.md`
 
 **❌ 禁止: Jira API直接使用**
@@ -235,6 +263,14 @@ curl -X POST "https://kencom2400.atlassian.net/rest/api/3/issue" \
 
 ## 5. ステータス遷移方法
 
+### 🚨 CRITICAL: チケット開始時のステータス遷移
+
+**`@start-task`コマンド実行時には必ずステータスを「In Progress」に変更すること**
+
+- チケット開始時には必ずステータスを「In Progress」（日本語: 「進行中」）に変更すること
+- `start-task.sh`スクリプトが自動的にステータスを変更します
+- ステータス変更に失敗した場合は警告を表示するが、作業は継続可能
+
 ### 遷移可能なステータスの確認
 
 ```bash
@@ -253,10 +289,10 @@ curl -X POST "https://kencom2400.atlassian.net/rest/api/3/issue" \
 # To Do に遷移
 ./scripts/jira/transition-issue.sh TEST-1 "To Do"
 
-# In Progress に遷移
+# In Progress に遷移（チケット開始時）
 ./scripts/jira/transition-issue.sh TEST-1 "In Progress"
 
-# Done に遷移
+# Done に遷移（作業完了時）
 ./scripts/jira/transition-issue.sh TEST-1 "Done"
 ```
 
