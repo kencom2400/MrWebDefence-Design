@@ -1070,25 +1070,25 @@ graph TB
     AdminUI -->|HTTPS<br/>TLS 1.2+<br/>セッションクッキー認証| UserAPI
     AdminUI -->|HTTPS<br/>TLS 1.2+<br/>セッションクッキー認証| LogAPI
 
-    ConfigAPI -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| ConfigService
-    UserAPI -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| UserService
-    LogAPI -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| LogService
+    ConfigAPI -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| ConfigService
+    UserAPI -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| UserService
+    LogAPI -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| LogService
 
     ConfigService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
     UserService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
     SignatureService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
 
-    ConfigService -->|Redis Protocol<br/>パスワード認証推奨| Redis
-    UserService -->|Redis Protocol<br/>パスワード認証推奨| Redis
+    ConfigService -->|Redis Protocol<br/>パスワード認証推奨<br/>SSL/TLS推奨| Redis
+    UserService -->|Redis Protocol<br/>パスワード認証推奨<br/>SSL/TLS推奨| Redis
 
-    LogService -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| LogCollector
-    LogCollector -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| LogAnalyzer
-    LogAnalyzer -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| LogForwarder
+    LogService -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| LogCollector
+    LogCollector -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| LogAnalyzer
+    LogAnalyzer -->|HTTPS<br/>mTLS推奨<br/>ネットワークポリシー| LogForwarder
     LogForwarder -->|HTTPS<br/>AWS認証情報| ExternalStorage
 
     WAF -->|HTTPS<br/>APIトークン認証| ConfigAPI
     WAF -->|TCP<br/>TLS推奨<br/>共有キー認証推奨| LogCollector
-    WAF -->|Redis Protocol<br/>パスワード認証推奨| Redis
+    WAF -->|Redis Protocol<br/>パスワード認証推奨<br/>SSL/TLS推奨| Redis
 
     style Internet fill:#ffcccc
     style LoadBalancer fill:#ffffcc
@@ -1108,8 +1108,8 @@ graph TB
 **凡例**:
 - 🔴 **赤色**: 外部（インターネット）
 - 🟡 **黄色**: 外部境界（DMZ相当）
-- 🟢 **緑色**: 内部境界（アプリケーション層）
-- 🔵 **青色**: 内部境界（サービス層）
+- 🟢 **緑色**: 内部境界（DMZ相当: 管理画面・API層）
+- 🔵 **青色**: 内部境界（アプリケーション層・ログ管理層）
 - 🟣 **紫色**: データ境界
 
 ##### 外部境界（External Boundary）
@@ -1147,9 +1147,16 @@ graph TB
 **定義**: システム内部のコンポーネント間の境界。内部ネットワーク内での通信を制御する防御層。
 
 **対象コンポーネント**:
-- 管理API ↔ バックエンドサービス
-- バックエンドサービス ↔ ログ管理サーバ
-- WAFエンジン ↔ ログ管理サーバ
+- **管理API ↔ バックエンドサービス**:
+  - 設定管理API ↔ 設定管理サービス
+  - ユーザー管理API ↔ ユーザー管理サービス
+  - ログ取得API ↔ ログ管理サービス
+- **バックエンドサービス ↔ ログ管理サーバ**:
+  - ログ管理サービス ↔ ログ収集サービス
+  - ログ収集サービス ↔ ログ分析エンジン
+  - ログ分析エンジン ↔ ログ転送サービス
+- **WAFエンジン ↔ ログ管理サーバ**:
+  - WAFエンジン（LogAgent） ↔ ログ収集サービス
 
 **セキュリティ要件**:
 
@@ -1191,8 +1198,8 @@ graph TB
 
 2. **通信の暗号化**
    - **推奨**: SSL/TLSによる通信の暗号化（本番環境では必須）
-   - **MySQL**: SSL/TLS接続を推奨
-   - **Redis**: パスワード認証を推奨（本番環境では必須）
+   - **MySQL**: SSL/TLS接続を推奨（本番環境では必須）
+   - **Redis**: SSL/TLSによる通信の暗号化を推奨（本番環境では必須）、パスワード認証も推奨（本番環境では必須）
 
 3. **データ保護**
    - **暗号化**: 機密データ（パスワード、APIトークン等）は暗号化して保存
@@ -1210,7 +1217,7 @@ graph TB
 |--------|---------|---------|--------|------|
 | 外部 → 外部境界 | HTTPS | 証明書認証 | TLS 1.2+ | 必須 |
 | 外部境界 → 内部境界 | HTTPS | セッションクッキー/APIトークン | TLS 1.2+ | 必須 |
-| 内部境界 → 内部境界 | HTTP | mTLS推奨 | mTLS推奨 | 本番環境ではmTLS必須 |
+| 内部境界 → 内部境界 | HTTPS | mTLS推奨 | TLS 1.2+ (mTLS推奨) | 本番環境ではmTLS必須 |
 | 内部境界 → データ境界 | MySQL/Redis Protocol | ユーザー名/パスワード | SSL/TLS推奨 | 本番環境ではSSL/TLS必須 |
 | データ境界 → 外部ストレージ | HTTPS | AWS認証情報等 | TLS 1.2+ | 必須 |
 
