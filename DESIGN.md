@@ -823,7 +823,7 @@ sequenceDiagram
 | 8084 | ログ転送サービス（内部） | HTTP |
 | 24224 | Fluentd Forward（ログ転送） | TCP |
 
-#### 3.1.3.5 コンポーネント間の関係性
+#### 3.1.3.6 コンポーネント間の関係性
 
 ```mermaid
 graph LR
@@ -1013,9 +1013,224 @@ sequenceDiagram
 
 #### 3.1.3.5 セキュリティ境界
 
-- **外部境界**: 管理画面へのアクセス（HTTPS必須）
-- **内部境界**: 管理API ↔ バックエンドサービス（同一ネットワーク）
-- **データ境界**: データベースアクセス（接続プール、認証必須）
+本システムのセキュリティ境界を明確に定義し、各境界でのセキュリティ要件を以下に示します。
+
+##### セキュリティ境界の定義
+
+セキュリティ境界は、システムを保護するための多層防御（Defense in Depth）の観点から、以下の3つの境界に分類されます：
+
+1. **外部境界（External Boundary）**: インターネットとシステム内部の境界
+2. **内部境界（Internal Boundary）**: システム内部のコンポーネント間の境界
+3. **データ境界（Data Boundary）**: データストアへのアクセス境界
+
+##### セキュリティ境界図
+
+```mermaid
+graph TB
+    subgraph "外部（インターネット）"
+        Internet[インターネット]
+    end
+
+    subgraph "外部境界"
+        LoadBalancer[ロードバランサー<br/>HTTPS必須]
+        WAF[WAFエンジン<br/>OpenAppSec]
+    end
+
+    subgraph "内部境界（DMZ相当）"
+        AdminUI[管理画面<br/>Web UI]
+        ConfigAPI[設定管理API]
+        UserAPI[ユーザー管理API]
+        LogAPI[ログ取得API]
+    end
+
+    subgraph "内部境界（アプリケーション層）"
+        ConfigService[設定管理サービス]
+        UserService[ユーザー管理サービス]
+        LogService[ログ管理サービス]
+        SignatureService[シグニチャ収集サービス]
+    end
+
+    subgraph "内部境界（ログ管理層）"
+        LogCollector[ログ収集サービス]
+        LogAnalyzer[ログ分析エンジン]
+        LogForwarder[ログ転送サービス]
+    end
+
+    subgraph "データ境界"
+        MySQL[(MySQL<br/>リレーショナルDB)]
+        Redis[(Redis<br/>キャッシュ・セッション)]
+        ExternalStorage[外部ストレージ<br/>S3等]
+    end
+
+    Internet -->|HTTPS<br/>TLS 1.2+<br/>証明書認証| LoadBalancer
+    LoadBalancer -->|HTTPS<br/>TLS 1.2+| WAF
+    WAF -->|HTTPS<br/>TLS 1.2+| AdminUI
+
+    AdminUI -->|HTTPS<br/>TLS 1.2+<br/>セッションクッキー認証| ConfigAPI
+    AdminUI -->|HTTPS<br/>TLS 1.2+<br/>セッションクッキー認証| UserAPI
+    AdminUI -->|HTTPS<br/>TLS 1.2+<br/>セッションクッキー認証| LogAPI
+
+    ConfigAPI -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| ConfigService
+    UserAPI -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| UserService
+    LogAPI -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| LogService
+
+    ConfigService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
+    UserService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
+    SignatureService -->|MySQL Protocol<br/>ユーザー名/パスワード<br/>SSL/TLS推奨| MySQL
+
+    ConfigService -->|Redis Protocol<br/>パスワード認証推奨| Redis
+    UserService -->|Redis Protocol<br/>パスワード認証推奨| Redis
+
+    LogService -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| LogCollector
+    LogCollector -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| LogAnalyzer
+    LogAnalyzer -->|HTTP<br/>mTLS推奨<br/>ネットワークポリシー| LogForwarder
+    LogForwarder -->|HTTPS<br/>AWS認証情報| ExternalStorage
+
+    WAF -->|HTTPS<br/>APIトークン認証| ConfigAPI
+    WAF -->|TCP<br/>TLS推奨<br/>共有キー認証推奨| LogCollector
+    WAF -->|Redis Protocol<br/>パスワード認証推奨| Redis
+
+    style Internet fill:#ffcccc
+    style LoadBalancer fill:#ffffcc
+    style WAF fill:#ffffcc
+    style AdminUI fill:#ccffcc
+    style ConfigAPI fill:#ccffcc
+    style UserAPI fill:#ccffcc
+    style LogAPI fill:#ccffcc
+    style ConfigService fill:#ccccff
+    style UserService fill:#ccccff
+    style LogService fill:#ccccff
+    style MySQL fill:#ffccff
+    style Redis fill:#ffccff
+    style ExternalStorage fill:#ffccff
+```
+
+**凡例**:
+- 🔴 **赤色**: 外部（インターネット）
+- 🟡 **黄色**: 外部境界（DMZ相当）
+- 🟢 **緑色**: 内部境界（アプリケーション層）
+- 🔵 **青色**: 内部境界（サービス層）
+- 🟣 **紫色**: データ境界
+
+##### 外部境界（External Boundary）
+
+**定義**: インターネットとシステム内部の境界。外部からのアクセスを制御する最初の防御層。
+
+**対象コンポーネント**:
+- ロードバランサー
+- WAFエンジン（OpenAppSec）
+- 管理画面（Web UI）
+
+**セキュリティ要件**:
+
+1. **通信の暗号化**
+   - **必須**: HTTPS（TLS 1.2以上）を使用
+   - **証明書**: 有効なSSL/TLS証明書を使用（Let's Encrypt等）
+   - **証明書の検証**: クライアント側で証明書の検証を必須とする
+
+2. **アクセス制御**
+   - **WAFエンジン**: すべてのHTTP/HTTPSリクエストを検査し、攻撃を検知・防御
+   - **レート制限**: DDoS攻撃対策としてレート制限を実装
+   - **IP AllowList**: 管理画面へのアクセスを特定のIPアドレスに制限（オプション）
+
+3. **認証・認可**
+   - **管理画面**: セッションクッキーによる認証（ログイン必須）
+   - **API**: セッションクッキーまたはAPIトークンによる認証
+   - **WAFエンジン**: APIトークンによる認証（設定取得時）
+
+4. **ログ・監視**
+   - すべての外部アクセスをログに記録
+   - 異常なアクセスパターンを検知・アラート
+
+##### 内部境界（Internal Boundary）
+
+**定義**: システム内部のコンポーネント間の境界。内部ネットワーク内での通信を制御する防御層。
+
+**対象コンポーネント**:
+- 管理API ↔ バックエンドサービス
+- バックエンドサービス ↔ ログ管理サーバ
+- WAFエンジン ↔ ログ管理サーバ
+
+**セキュリティ要件**:
+
+1. **ネットワーク分離**
+   - **必須**: 同一ネットワーク内での通信（VPC、Kubernetesクラスタ内等）
+   - **ネットワークポリシー**: Kubernetes NetworkPolicy等でアクセス制御
+   - **セグメンテーション**: 必要に応じてネットワークセグメントを分離
+
+2. **通信の暗号化**
+   - **推奨**: mTLS（mutual TLS）による相互認証
+   - **本番環境**: mTLSを必須とする
+   - **開発環境**: ネットワークポリシーによる保護を前提とする
+
+3. **認証・認可**
+   - **本番環境**: mTLSまたはJWTトークンによるサービス間認証を必須とする
+   - **開発環境**: ネットワークポリシーによる保護を前提とする
+   - **サービス間通信**: サービスメッシュ（Istio等）の導入を検討
+
+4. **アクセス制御**
+   - **最小権限の原則**: 各サービスは必要最小限の権限のみを持つ
+   - **ネットワークポリシー**: 許可されたコンポーネント間のみ通信を許可
+   - **ファイアウォール**: 必要に応じて内部ファイアウォールを設定
+
+##### データ境界（Data Boundary）
+
+**定義**: データストアへのアクセス境界。機密データを保護する最後の防御層。
+
+**対象コンポーネント**:
+- MySQL（リレーショナルデータベース）
+- Redis（キャッシュ・セッションストア）
+- 外部ストレージ（S3等）
+
+**セキュリティ要件**:
+
+1. **アクセス制御**
+   - **必須**: ユーザー名/パスワードによる認証
+   - **最小権限の原則**: 各サービスは必要最小限のデータベース権限のみを持つ
+   - **接続プール**: 接続プール経由でアクセス（HikariCP等）
+
+2. **通信の暗号化**
+   - **推奨**: SSL/TLSによる通信の暗号化（本番環境では必須）
+   - **MySQL**: SSL/TLS接続を推奨
+   - **Redis**: パスワード認証を推奨（本番環境では必須）
+
+3. **データ保護**
+   - **暗号化**: 機密データ（パスワード、APIトークン等）は暗号化して保存
+   - **バックアップ**: バックアップデータも暗号化して保存
+   - **アクセスログ**: すべてのデータアクセスをログに記録
+
+4. **ネットワーク分離**
+   - **必須**: データベースは内部ネットワーク内でのみアクセス可能
+   - **外部アクセス**: 外部からの直接アクセスは禁止
+   - **管理アクセス**: 管理用アクセスはVPN経由等で制限
+
+##### セキュリティ境界間の通信要件
+
+| 境界間 | 通信方式 | 認証方式 | 暗号化 | 備考 |
+|--------|---------|---------|--------|------|
+| 外部 → 外部境界 | HTTPS | 証明書認証 | TLS 1.2+ | 必須 |
+| 外部境界 → 内部境界 | HTTPS | セッションクッキー/APIトークン | TLS 1.2+ | 必須 |
+| 内部境界 → 内部境界 | HTTP | mTLS推奨 | mTLS推奨 | 本番環境ではmTLS必須 |
+| 内部境界 → データ境界 | MySQL/Redis Protocol | ユーザー名/パスワード | SSL/TLS推奨 | 本番環境ではSSL/TLS必須 |
+| データ境界 → 外部ストレージ | HTTPS | AWS認証情報等 | TLS 1.2+ | 必須 |
+
+##### セキュリティ対策の実装方針
+
+1. **多層防御（Defense in Depth）**
+   - 単一のセキュリティ対策に依存せず、複数の防御層を実装
+   - 各境界で独立したセキュリティ対策を実装
+
+2. **最小権限の原則（Principle of Least Privilege）**
+   - 各コンポーネントは必要最小限の権限のみを持つ
+   - データベースアクセス権限を最小限に制限
+
+3. **監視・ログ**
+   - すべての境界を越える通信をログに記録
+   - 異常なアクセスパターンを検知・アラート
+
+4. **定期的なセキュリティ監査**
+   - セキュリティ境界の設定を定期的に監査
+   - 脆弱性スキャンを定期的に実施
 
 ### 3.1.4 マイクロサービス/モノリスの選択
 
