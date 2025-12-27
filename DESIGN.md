@@ -432,7 +432,7 @@ graph TB
 
     ConfigAPI --> ConfigService
     UserAPI --> UserService
-    LogAPI --> ConfigService
+    LogAPI --> LogAnalyzer
 
     ConfigService --> MySQL
     ConfigService --> Redis
@@ -504,7 +504,7 @@ graph TB
 - **ログ転送サービス**: ログを外部システムに転送
   - S3へのアーカイブ、Splunk/Datadogへの転送（将来拡張）
 
-#### 3.1.3.2 コンポーネント間の関係性
+#### 3.1.3.3 コンポーネント間の関係性
 
 ```mermaid
 graph LR
@@ -520,6 +520,7 @@ graph LR
     subgraph "API層"
         ConfigAPI[設定管理API]
         UserAPI[ユーザー管理API]
+        LogAPI[ログ取得API]
     end
 
     subgraph "サービス層"
@@ -545,9 +546,11 @@ graph LR
 
     AdminUI -->|REST API<br/>HTTPS| ConfigAPI
     AdminUI -->|REST API<br/>HTTPS| UserAPI
+    AdminUI -->|REST API<br/>HTTPS| LogAPI
 
     ConfigAPI -->|内部API呼び出し| ConfigService
     UserAPI -->|内部API呼び出し| UserService
+    LogAPI -->|内部API呼び出し| LogServer
 
     ConfigService -->|接続プール| MySQL
     ConfigService -->|直接接続| Redis
@@ -568,6 +571,7 @@ graph LR
 2. **管理API ↔ バックエンドサービス**: 内部API呼び出し
    - 同一ネットワーク内での通信
    - 認証不要（内部通信）
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
 
 3. **バックエンドサービス ↔ データストア**: 
    - **MySQL**: 接続プール経由で接続
@@ -580,12 +584,13 @@ graph LR
 5. **WAFエンジン ↔ ログ管理サーバ**: HTTP/TCP（ログ転送）
    - Fluentd Forward Protocol
    - 内部ネットワーク内での通信（認証なし）
+   - **セキュリティ**: ネットワークポリシー（例: KubernetesのNetworkPolicy）によって意図しないアクセスがブロックされることが前提
 
 6. **WAFエンジン ↔ Redis**: 直接接続（レート制限）
    - Redis Protocolで直接接続
    - レート制限カウンターの管理
 
-#### 3.1.3.3 データフロー
+#### 3.1.3.4 データフロー
 
 ##### 設定配信フロー
 
@@ -619,15 +624,16 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant WAF as WAFエンジン
-    participant Fluentd as Fluentd
-    participant LogServer as ログ管理サーバ
+    participant LogAgent as "LogAgent (Fluentd)"
+    participant LogCollector as "ログ収集サービス"
+    participant LogAnalyzer as "ログ分析エンジン"
     participant Storage as ローカルストレージ/S3
 
-    WAF->>Fluentd: WAF検知ログ
-    Fluentd->>Fluentd: ログパース・正規化
-    Fluentd->>LogServer: HTTP/TCP転送
-    LogServer->>LogServer: ログ分析
-    LogServer->>Storage: ログ保存・アーカイブ
+    WAF->>LogAgent: WAF検知ログ
+    LogAgent->>LogAgent: ログパース・正規化
+    LogAgent->>LogCollector: HTTP/TCP転送
+    LogCollector->>LogAnalyzer: ログ分析
+    LogAnalyzer->>Storage: ログ保存・アーカイブ
 ```
 
 ##### 認証フロー
@@ -636,22 +642,22 @@ sequenceDiagram
 sequenceDiagram
     participant UI as 管理画面
     participant API as 管理API
-    participant Auth as 認証サービス
+    participant UserService as "ユーザー管理サービス(認証)"
     participant DB as MySQL
     participant Redis as Redis
 
     UI->>API: ログインリクエスト
-    API->>Auth: 認証リクエスト
-    Auth->>DB: ユーザー情報取得
-    DB-->>Auth: ユーザー情報
-    Auth->>Auth: パスワード検証
-    Auth->>Redis: セッション作成
-    Redis-->>Auth: セッションID
-    Auth-->>API: 認証成功・セッションID
+    API->>UserService: 認証リクエスト
+    UserService->>DB: ユーザー情報取得
+    DB-->>UserService: ユーザー情報
+    UserService->>UserService: パスワード検証
+    UserService->>Redis: セッション作成
+    Redis-->>UserService: セッションID
+    UserService-->>API: 認証成功・セッションID
     API-->>UI: セッションクッキー設定
 ```
 
-#### 3.1.3.4 通信プロトコル
+#### 3.1.3.5 通信プロトコル
 
 | コンポーネント間 | プロトコル | ポート | 認証 |
 |----------------|----------|--------|------|
@@ -661,7 +667,7 @@ sequenceDiagram
 | バックエンド ↔ MySQL | MySQL Protocol | 3306 | ユーザー名/パスワード |
 | バックエンド ↔ Redis | Redis Protocol | 6379 | パスワード（オプション） |
 
-#### 3.1.3.5 セキュリティ境界
+#### 3.1.3.6 セキュリティ境界
 
 - **外部境界**: 管理画面へのアクセス（HTTPS必須）
 - **内部境界**: 管理API ↔ バックエンドサービス（同一ネットワーク）
