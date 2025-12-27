@@ -29,7 +29,7 @@ fi
 
 EPIC_NUM=$1
 EPIC_KEY="MWD-${EPIC_NUM}"
-EPIC_TASK_DESIGN="${REPO_ROOT}/EPIC_TASK_DESIGN.md"
+EPIC_TASK_DESIGN="${REPO_ROOT}/docs/EPIC_TASK_DESIGN.md"
 
 if [ ! -f "$EPIC_TASK_DESIGN" ]; then
     echo "❌ エラー: EPIC_TASK_DESIGN.md が見つかりません" >&2
