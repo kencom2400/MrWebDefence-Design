@@ -545,13 +545,15 @@ sequenceDiagram
     participant LogAgent as "LogAgent (Fluentd)"
     participant LogCollector as "ログ収集サービス"
     participant LogAnalyzer as "ログ分析エンジン"
+    participant LogForwarder as "ログ転送サービス"
     participant Storage as ローカルストレージ/S3
 
     OpenAppSec->>LogAgent: WAF検知ログ
     LogAgent->>LogAgent: ログパース・正規化
     LogAgent->>LogCollector: HTTP/TCP転送
     LogCollector->>LogAnalyzer: ログ分析
-    LogAnalyzer->>Storage: ログ保存・アーカイブ
+    LogAnalyzer->>LogForwarder: 分析済みログ転送
+    LogForwarder->>Storage: ログ保存・アーカイブ
 ```
 
 ##### ログ取得フロー
@@ -611,9 +613,11 @@ sequenceDiagram
     participant Batch as バッチスケジューラ
     participant SigService as シグニチャ収集サービス
     participant DB as MySQL
+    participant LogService as ログ管理サービス
     participant LogAnalyzer as ログ分析エンジン
     participant UI as 管理画面
     participant ConfigAPI as 設定管理API
+    participant ConfigService as 設定管理サービス
 
     Note over Batch: 毎日2時（JST）に実行
     Batch->>SigService: シグニチャ生成バッチ起動
@@ -624,17 +628,21 @@ sequenceDiagram
 
     Note over Batch: 検証バッチ実行
     Batch->>SigService: シグニチャ検証バッチ起動
-    SigService->>LogAnalyzer: 過去ログ取得
-    LogAnalyzer-->>SigService: 過去ログデータ
+    SigService->>LogService: 過去ログ取得依頼
+    LogService->>LogAnalyzer: 過去ログ取得
+    LogAnalyzer-->>LogService: 過去ログデータ
+    LogService-->>SigService: 過去ログデータ
     SigService->>SigService: 誤検知率・検知率計算
     SigService->>DB: 検証結果保存
 
     Note over UI: サービス管理者による承認
     UI->>ConfigAPI: シグニチャ候補承認リクエスト
-    ConfigAPI->>SigService: 承認処理
+    ConfigAPI->>ConfigService: 承認処理リクエスト
+    ConfigService->>SigService: 承認処理
     SigService->>DB: シグニチャ承認・有効化
     DB-->>SigService: 更新完了
-    SigService-->>ConfigAPI: 承認完了
+    SigService-->>ConfigService: 承認完了
+    ConfigService-->>ConfigAPI: 承認完了
     ConfigAPI-->>UI: 承認成功
 ```
 
