@@ -515,25 +515,25 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant UI as 管理画面
-    participant API as 管理API
-    participant Service as 設定管理サービス
+    participant ConfigAPI as 設定管理API
+    participant ConfigService as 設定管理サービス
     participant DB as MySQL
     participant ConfigAgent as 設定取得エージェント
 
-    UI->>API: シグニチャグループ設定変更
-    API->>Service: 設定更新リクエスト
-    Service->>DB: 設定を保存
-    DB-->>Service: 保存完了
-    Service-->>API: 更新完了
-    API-->>UI: 更新成功
+    UI->>ConfigAPI: シグニチャグループ設定変更
+    ConfigAPI->>ConfigService: 設定更新リクエスト
+    ConfigService->>DB: 設定を保存
+    DB-->>ConfigService: 保存完了
+    ConfigService-->>ConfigAPI: 更新完了
+    ConfigAPI-->>UI: 更新成功
 
     Note over ConfigAgent: ポーリング（5分間隔）またはWebhook
-    ConfigAgent->>API: 設定取得リクエスト
-    API->>Service: 設定取得
-    Service->>DB: 設定を取得
-    DB-->>Service: 設定データ
-    Service-->>API: 設定データ
-    API-->>ConfigAgent: OpenAppSec設定形式
+    ConfigAgent->>ConfigAPI: 設定取得リクエスト
+    ConfigAPI->>ConfigService: 設定取得
+    ConfigService->>DB: 設定を取得
+    DB-->>ConfigService: 設定データ
+    ConfigService-->>ConfigAPI: 設定データ
+    ConfigAPI-->>ConfigAgent: OpenAppSec設定形式
     ConfigAgent->>ConfigAgent: 設定ファイル更新・リロード
 ```
 
@@ -588,20 +588,20 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant UI as 管理画面
-    participant API as 管理API
-    participant UserService as "ユーザー管理サービス(認証)"
+    participant UserAPI as ユーザー管理API
+    participant UserService as ユーザー管理サービス
     participant DB as MySQL
     participant Redis as Redis
 
-    UI->>API: ログインリクエスト
-    API->>UserService: 認証リクエスト
+    UI->>UserAPI: ログインリクエスト
+    UserAPI->>UserService: 認証リクエスト
     UserService->>DB: ユーザー情報取得
     DB-->>UserService: ユーザー情報
     UserService->>UserService: パスワード検証
     UserService->>Redis: セッション作成
     Redis-->>UserService: セッションID
-    UserService-->>API: 認証成功・セッションID
-    API-->>UI: セッションクッキー設定
+    UserService-->>UserAPI: 認証成功・セッションID
+    UserAPI-->>UI: セッションクッキー設定
 ```
 
 ##### シグニチャ収集フロー
@@ -613,7 +613,7 @@ sequenceDiagram
     participant DB as MySQL
     participant LogAnalyzer as ログ分析エンジン
     participant UI as 管理画面
-    participant API as 管理API
+    participant ConfigAPI as 設定管理API
 
     Note over Batch: 毎日2時（JST）に実行
     Batch->>SigService: シグニチャ生成バッチ起動
@@ -630,12 +630,12 @@ sequenceDiagram
     SigService->>DB: 検証結果保存
 
     Note over UI: サービス管理者による承認
-    UI->>API: シグニチャ候補承認リクエスト
-    API->>SigService: 承認処理
+    UI->>ConfigAPI: シグニチャ候補承認リクエスト
+    ConfigAPI->>SigService: 承認処理
     SigService->>DB: シグニチャ承認・有効化
     DB-->>SigService: 更新完了
-    SigService-->>API: 承認完了
-    API-->>UI: 承認成功
+    SigService-->>ConfigAPI: 承認完了
+    ConfigAPI-->>UI: 承認成功
 ```
 
 ##### レート制限フロー
@@ -652,7 +652,6 @@ sequenceDiagram
     Nginx->>RateLimit: レート制限チェック
     RateLimit->>Redis: トークン取得（Luaスクリプト実行）
     Redis-->>RateLimit: トークン残数・判定結果
-    
     alt トークンあり（許可）
         RateLimit-->>Nginx: 許可
         Nginx->>OpenAppSec: リクエスト転送
@@ -670,35 +669,35 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant UI as 管理画面
-    participant API as ユーザー管理API
+    participant UserAPI as ユーザー管理API
     participant UserService as ユーザー管理サービス
     participant DB as MySQL
     participant Redis as Redis
 
-    UI->>API: ユーザー作成リクエスト
-    API->>UserService: ユーザー作成
+    UI->>UserAPI: ユーザー作成リクエスト
+    UserAPI->>UserService: ユーザー作成
     UserService->>DB: ユーザー情報保存
     DB-->>UserService: 保存完了
-    UserService-->>API: 作成完了
-    API-->>UI: 作成成功
+    UserService-->>UserAPI: 作成完了
+    UserAPI-->>UI: 作成成功
 
-    UI->>API: ユーザー更新リクエスト
-    API->>UserService: ユーザー更新
+    UI->>UserAPI: ユーザー更新リクエスト
+    UserAPI->>UserService: ユーザー更新
     UserService->>DB: ユーザー情報更新
     DB-->>UserService: 更新完了
     UserService->>Redis: セッション無効化（必要時）
     Redis-->>UserService: 無効化完了
-    UserService-->>API: 更新完了
-    API-->>UI: 更新成功
+    UserService-->>UserAPI: 更新完了
+    UserAPI-->>UI: 更新成功
 
-    UI->>API: ユーザー削除リクエスト
-    API->>UserService: ユーザー削除
+    UI->>UserAPI: ユーザー削除リクエスト
+    UserAPI->>UserService: ユーザー削除
     UserService->>Redis: セッション削除
     Redis-->>UserService: 削除完了
     UserService->>DB: ユーザー情報削除
     DB-->>UserService: 削除完了
-    UserService-->>API: 削除完了
-    API-->>UI: 削除成功
+    UserService-->>UserAPI: 削除完了
+    UserAPI-->>UI: 削除成功
 ```
 
 #### 3.1.3.4 コンポーネント間の関係性
