@@ -17,6 +17,10 @@
 3. **レビュー依頼**: 必要に応じてレビュアーを指定
 4. **PR承認後**: mainにマージ
 5. **マージ後のみ**: IssueをDoneに変更
+   - **🚨 CRITICAL: PRマージ時には必ずJiraチケットのステータスを「Done」に変更すること**
+   - スクリプトを使用: `bash scripts/jira/workflow/set-issue-done-on-merge.sh <PR_NUMBER> [ISSUE_KEY]`
+   - IssueキーはPRのタイトルまたはブランチ名から自動抽出される（例: `feat(MWD-20): ...` または `feature/MWD-20-task-1-3`）
+   - Issueキーが抽出できない場合は手動で指定: `bash scripts/jira/workflow/set-issue-done-on-merge.sh <PR_NUMBER> <ISSUE_KEY>`
 
 **PR作成前チェック:**
 

@@ -150,6 +150,9 @@ Backlog → To Do → In Progress → Done
   - **🚨 CRITICAL: `@start-task`コマンド実行時には必ずステータスを「In Progress」に変更すること**
   - **詳細**: `.cursor/rules/00-workflow-checklist.d/02-task-start.md`の「🚨 CRITICAL: 必ずステータスを「In Progress」に変更」を参照
 - **Done**: 作業が完了し、PRがマージされた時
+  - **🚨 CRITICAL: PRマージ時には必ずJiraチケットのステータスを「Done」に変更すること**
+  - スクリプトを使用: `bash scripts/jira/workflow/set-issue-done-on-merge.sh <PR_NUMBER> [ISSUE_KEY]`
+  - IssueキーはPRのタイトルまたはブランチ名から自動抽出される
 
 ## 3. フィールド定義の取得方法
 
