@@ -9,10 +9,15 @@
 # 3. config.local.sh（認証情報のみ）
 # 4. デフォルト値
 
+# 既に読み込まれている場合はスキップ
+if [ -n "$_CONFIG_LOADED" ]; then
+  return 0
+fi
+
 # ローカル設定ファイルの読み込み（存在する場合）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "${SCRIPT_DIR}/config.local.sh" ]; then
-  source "${SCRIPT_DIR}/config.local.sh"
+  source "${SCRIPT_DIR}/config.local.sh" 2>/dev/null || true
 fi
 
 # プロジェクト設定ファイル（YAML）から設定を読み込む関数
@@ -96,4 +101,7 @@ export API_RATE_LIMIT_WAIT
 readonly MAX_RETRIES="${MAX_RETRIES:-5}"  # API反映待機のリトライ最大回数
 readonly RETRY_INTERVAL="${RETRY_INTERVAL:-3}"  # リトライ間隔（秒）
 export MAX_RETRIES RETRY_INTERVAL
+
+# 読み込み完了フラグ
+export _CONFIG_LOADED=1
 
