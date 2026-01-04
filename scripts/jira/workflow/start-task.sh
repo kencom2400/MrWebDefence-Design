@@ -235,7 +235,7 @@ select_priority_issue() {
     }')
   
   set +e
-  TODO_ISSUES=$(jira_api_call "POST" "search" "$JQL_DATA" 2>&1)
+  TODO_ISSUES=$(jira_api_call "POST" "search/jql" "$JQL_DATA" 2>&1)
   local search_exit_code=$?
   set -e
   
