@@ -2463,7 +2463,7 @@ src/main/resources/db/migration/seed/
 **運用方法**:
 1. **初期データ投入用SQLの作成**
    - Repeatable Migrations形式で初期データ投入用SQLを作成
-   - `src/main/resources/db/migration/seed/`ディレクトリに配置
+   - `src/main/resources/db/seed/`ディレクトリに配置
    - 通常のマイグレーションディレクトリには配置しない
 
 2. **初期データ投入の実行タイミング**
@@ -2473,7 +2473,7 @@ src/main/resources/db/migration/seed/
 
 3. **Flyway設定での制御**
    - 通常のマイグレーション実行時: `locations=db/migration`（seedディレクトリは除外）
-   - 初期データ投入実行時: `locations=db/migration,db/migration/seed`（seedディレクトリを含める）
+   - 初期データ投入実行時: `locations=db/migration,db/seed`（seedディレクトリを含める）
 
 4. **実行方法の例**:
    ```bash
