@@ -2231,6 +2231,27 @@ erDiagram
 - `fqdn_signature_applications(fqdn_id, group_member_id)`: ユニーク制約
 - `fqdn_signature_applications(fqdn_id, order)`: 順序での検索を最適化
 
+#### 3.2.7.3 ユニーク制約の一覧
+
+以下のテーブルにユニーク制約が設定されています：
+
+- **users**: `email` - メールアドレスの一意性を保証
+- **roles**: `name` - ロール名の一意性を保証
+- **user_roles**: `(user_id, role_id)` - 同一ユーザーに同じロールを重複割り当て不可
+- **fqdns**: `fqdn` - FQDNの一意性を保証（グローバルに一意）
+- **signature_group_members**: `(group_id, signature_id)` - 同一グループ内で同じシグニチャを重複追加不可
+- **customer_signature_group_settings**: `(customer_id, fqdn_id, group_id)` - 同一顧客・FQDN・グループの組み合わせの重複を防止
+- **fqdn_signature_applications**: `(fqdn_id, group_member_id)` - 同一FQDN・グループメンバーの組み合わせの重複を防止
+- **batch_schedules**: `schedule_type` - スケジュールタイプの一意性を保証（各タイプは1つのスケジュールのみ）
+
+#### 3.2.7.4 インデックス設計の考慮事項
+
+- **パフォーマンス**: 頻繁に使用される検索条件にインデックスを設定
+- **更新コスト**: インデックスは更新時のコストがかかるため、必要最小限に
+- **複合インデックス**: 複数のカラムを組み合わせた検索が多い場合は複合インデックスを検討
+- **カーディナリティ**: カーディナリティが低い（値の種類が少ない）カラムはインデックスの効果が限定的
+- **NULL値**: NULL値が多いカラムはインデックスの効果が限定的
+
 ### 3.2.8 データベースマイグレーション設計（Flyway）
 
 #### 3.2.8.1 マイグレーションファイル命名規則
