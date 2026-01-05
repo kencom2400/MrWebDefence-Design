@@ -2893,6 +2893,8 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
 
 #### POST /api/v1/auth/login
 
+**説明**: ユーザーのログインを処理し、セッションを作成します。
+
 **リクエスト**:
 ```json
 {
@@ -2901,6 +2903,21 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
 }
 ```
 
+**リクエストバリデーション**:
+- `email`: 必須、文字列、メールアドレス形式、最大255文字
+- `password`: 必須、文字列、最小8文字、最大128文字
+
+**処理フロー**:
+1. リクエストバリデーション
+2. ユーザーをemailで検索（`users`テーブル）
+3. ユーザーが存在しない、または無効化されている場合はエラー
+4. パスワードをbcryptで検証
+5. IP AllowListチェック（設定されている場合）
+6. セッションIDを生成（32文字のランダム文字列）
+7. セッション情報をRedisに保存（TTL: 30分）
+8. セッションクッキーを設定（HttpOnly, Secure, SameSite=Strict）
+9. ユーザー情報とセッション情報を返却
+
 **レスポンス** (200):
 ```json
 {
@@ -2908,11 +2925,26 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
     "id": 1,
     "email": "user@example.com",
     "name": "User Name",
-    "roles": ["customer_admin"]
+    "roles": ["customer_admin"],
+    "customer_id": 1
   },
   "session": {
     "id": "session_id",
     "expires_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+**エラーレスポンス** (400):
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request parameters",
+    "details": {
+      "email": "Email is required",
+      "password": "Password must be at least 8 characters"
+    }
   }
 }
 ```
@@ -2927,12 +2959,47 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
 }
 ```
 
+**エラーレスポンス** (403):
+```json
+{
+  "error": {
+    "code": "IP_NOT_ALLOWED",
+    "message": "Your IP address is not allowed"
+  }
+}
+```
+
+**セキュリティ考慮事項**:
+- ログイン試行回数の制限（レート制限: 5回/分/IP）
+- パスワード検証失敗時は、ユーザーが存在するかどうかを明示しない（タイミング攻撃対策）
+- セッションIDは暗号学的に安全な乱数生成器を使用
+
 #### POST /api/v1/auth/logout
+
+**説明**: 現在のセッションを無効化し、ログアウトします。
+
+**認証**: 必須（セッションクッキー）
+
+**処理フロー**:
+1. セッションクッキーからセッションIDを取得
+2. Redisからセッション情報を削除
+3. セッションクッキーを削除（有効期限を過去に設定）
+4. 成功レスポンスを返却
 
 **レスポンス** (200):
 ```json
 {
   "message": "Logged out successfully"
+}
+```
+
+**エラーレスポンス** (401):
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Authentication required"
+  }
 }
 ```
 
