@@ -10996,3 +10996,288 @@ extend-ignore = ["E203", "E266", "W503"]
 **参照**: PR #60 - Issue #23: CI/CDパイプラインの構築（Gemini Code Assistレビュー指摘 - 第2回）
 
 ---
+
+## データベース設計・ER図レビュー観点
+
+### ER図の完全性チェック
+
+**❌ 悪い例**: ER図に外部キー関係が表現されていない
+
+```mermaid
+erDiagram
+    users ||--o{ customer_signature_group_settings : "applies_to"
+    signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    # applied_byとusersテーブルの関連が欠落
+```
+
+**問題点**:
+- テーブル定義に外部キーがあるのに、ER図に表現されていない
+- 設計の整合性が損なわれる
+- 実装時に混乱を招く可能性がある
+
+**✅ 良い例**: すべての外部キー関係をER図に表現する
+
+```mermaid
+erDiagram
+    users ||--o{ customer_signature_group_settings : "applied_by"
+    fqdns ||--o{ customer_signature_group_settings : "applies_to"
+    signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+```
+
+**理由**:
+- 設計の整合性が保たれる
+- ER図の自己完結性が高まる
+- 実装時の混乱を防ぐことができる
+
+### 複数外部キーの論理の明確化
+
+**❌ 悪い例**: 複数のNULL許容外部キーの論理が不明確
+
+```markdown
+| user_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | ユーザーID |
+| role_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | ロールID |
+| customer_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID |
+| fqdn_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID |
+```
+
+**問題点**:
+- 複数のキーが設定された場合の論理（AND/OR条件）が不明確
+- 実装時の混乱を招く可能性がある
+- テストケースの作成が困難
+
+**✅ 良い例**: 複数外部キーの論理を明確に説明する
+
+```markdown
+**注意**: `user_id`、`role_id`、`customer_id`、`fqdn_id`はすべてNULL許容です。これらのキーが複数設定された場合の論理は以下の通りです：
+- **優先順位**: より具体的な条件が優先されます（user_id > role_id > customer_id > fqdn_id）
+- **マッチング条件**: 設定されているすべてのキーが一致する場合にのみ、AllowListエントリが適用されます（AND条件）
+- **例**: `user_id=1`と`customer_id=2`が両方設定されている場合、ユーザーIDが1かつ顧客IDが2の場合のみ適用されます
+- **実装時の注意**: アプリケーションレベルで適切なマッチングロジックを実装する必要があります
+```
+
+**理由**:
+- 実装時の混乱を防ぐことができる
+- テストケースの作成が容易になる
+- ドキュメントの完成度が向上する
+
+### ER図の自己完結性
+
+**❌ 悪い例**: 部分ER図に関係が欠落している
+
+```mermaid
+erDiagram
+    fqdns ||--o{ fqdn_signature_applications : "has"
+    signatures ||--o{ fqdn_signature_applications : "applied_to"
+    # signature_groups、signature_group_membersとの関連が欠落
+```
+
+**問題点**:
+- 部分ER図に関係が欠落している
+- 全体ER図と部分ER図の整合性が損なわれる
+- 理解が困難になる
+
+**✅ 良い例**: すべてのER図に関係を完全に表現する
+
+```mermaid
+erDiagram
+    fqdns ||--o{ fqdn_signature_applications : "has"
+    signatures ||--o{ fqdn_signature_applications : "applied_to"
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
+```
+
+**理由**:
+- ER図の自己完結性が高まる
+- 部分ER図だけでも理解できる
+- 全体ER図との整合性が保たれる
+
+### 実装チェックリスト
+
+- [ ] ER図にすべての外部キー関係が表現されているか確認
+- [ ] 複数のNULL許容外部キーがある場合、その論理（AND/OR条件、優先順位）を明確に説明する
+- [ ] 部分ER図と全体ER図の整合性を確認
+- [ ] テーブル定義書とER図の整合性を確認
+
+**参照**: PR #37 - Issue MWD-77: Task 2.1: ER図作成（Gemini Code Assistレビュー指摘）
+
+### ユニークキーの冗長性排除
+
+**❌ 悪い例**: ユニークキーに冗長なカラムを含める
+
+```sql
+-- group_member_idは既にgroup_idとsignature_idを一意に特定する
+UNIQUE KEY (fqdn_id, signature_id, group_id, group_member_id)
+```
+
+**問題点**:
+- `group_member_id`は`signature_group_members`テーブルの主キーであり、既に`group_id`と`signature_id`を一意に特定する
+- 冗長なカラムを含めることで、パフォーマンスとメンテナンス性が低下する
+- インデックスサイズが不必要に大きくなる
+
+**✅ 良い例**: 最小限の構成でユニークキーを定義する
+
+```sql
+-- group_member_idだけで十分
+UNIQUE KEY (fqdn_id, group_member_id)
+```
+
+**理由**:
+- パフォーマンスが向上する
+- メンテナンス性が向上する
+- インデックスサイズが最適化される
+
+### 設計変更時の機能要件の確認
+
+**❌ 悪い例**: 設計変更時に既存の機能要件を見落とす
+
+```sql
+-- 以前: fqdn_idがNULL許容で顧客全体設定が可能
+fqdn_id BIGINT UNSIGNED NULL
+
+-- 変更後: NOT NULLに変更して機能が失われる
+fqdn_id BIGINT UNSIGNED NOT NULL
+```
+
+**問題点**:
+- 設計変更により既存の機能要件が満たせなくなる
+- 要件の確認が不十分
+- 実装時に問題が発覚する可能性がある
+
+**✅ 良い例**: 設計変更時に機能要件を確認し、必要に応じて対応する
+
+```sql
+-- 要件を確認し、NULL許容を維持
+fqdn_id BIGINT UNSIGNED NULL  -- NULLの場合は顧客全体
+```
+
+**理由**:
+- 機能要件を満たすことができる
+- 実装時の混乱を防ぐことができる
+- ドキュメントの説明を追加することで明確になる
+
+### ER図の重複定義の排除
+
+**❌ 悪い例**: ER図に関係の重複定義がある
+
+```mermaid
+erDiagram
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
+```
+
+**問題点**:
+- 同じ関係が重複して定義されている
+- 可読性が低下する
+- メンテナンス性が低下する
+
+**✅ 良い例**: 重複を排除して定義する
+
+```mermaid
+erDiagram
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
+```
+
+**理由**:
+- 可読性が向上する
+- メンテナンス性が向上する
+- ER図の整合性が保たれる
+
+### 実装チェックリスト
+
+- [ ] ユニークキーが最小限の構成になっているか確認（冗長なカラムを含めない）
+- [ ] 設計変更時に既存の機能要件を確認する
+- [ ] ER図に重複定義がないか確認する
+- [ ] 複合インデックスの定義がユニークキーと整合しているか確認する
+
+**参照**: PR #37 - Issue MWD-77: Task 2.1: ER図作成（Gemini Code Assistレビュー指摘 - 第2回）
+
+### 意図的な非正規化のドキュメント化
+
+**❌ 悪い例**: 冗長なカラムの存在理由が不明確
+
+```sql
+-- signature_idとgroup_idはgroup_member_idから取得可能だが、なぜ保持しているのか不明
+CREATE TABLE fqdn_signature_applications (
+    fqdn_id BIGINT UNSIGNED NOT NULL,
+    signature_id BIGINT UNSIGNED NOT NULL,
+    group_id BIGINT UNSIGNED NOT NULL,
+    group_member_id BIGINT UNSIGNED NOT NULL,
+    ...
+);
+```
+
+**問題点**:
+- 冗長なカラムの存在理由が不明確
+- データ不整合のリスクがあることを認識していない可能性がある
+- 実装時に整合性維持の方法が不明確
+
+**✅ 良い例**: 意図的な非正規化であることを明記し、整合性維持方法を記載する
+
+```markdown
+**注意事項**:
+- `signature_id`と`group_id`カラムは、`group_member_id`から取得可能であるため、理論的には冗長です。しかし、パフォーマンス向上のための意図的な非正規化として保持しています。
+- **データ整合性の維持**: `signature_id`と`group_id`は`group_member_id`と整合性が保たれている必要があります。データ不整合を防ぐため、以下のいずれかの方法で整合性を維持する必要があります：
+  - **アプリケーションロジック**: レコード作成・更新時に、`group_member_id`から`signature_id`と`group_id`を取得して設定する
+  - **データベーストリガー**: INSERT/UPDATE時に自動的に`signature_id`と`group_id`を設定するトリガーを実装する
+  - **定期的な整合性チェック**: バッチ処理などで定期的に整合性をチェックし、不整合があれば修正する
+- 実装時には、上記の整合性維持方法のいずれかを選択し、ドキュメント化してください。
+```
+
+**理由**:
+- 設計意図が明確になる
+- データ不整合のリスクを認識できる
+- 実装時の整合性維持方法が明確になる
+
+### 設計変更時の機能要件の再確認
+
+**❌ 悪い例**: 設計変更時に既存の機能要件を見落とす
+
+```sql
+-- 以前: customer_idとfqdn_idの両方があった
+CREATE TABLE customer_signature_group_settings (
+    customer_id BIGINT UNSIGNED NOT NULL,
+    fqdn_id BIGINT UNSIGNED NULL,  -- NULLの場合は顧客全体
+    ...
+);
+
+-- 変更後: customer_idを削除してしまった
+CREATE TABLE customer_signature_group_settings (
+    fqdn_id BIGINT UNSIGNED NULL,  -- NULLの場合は顧客全体（どの顧客？）
+    ...
+);
+```
+
+**問題点**:
+- 設計変更により既存の機能要件が満たせなくなる
+- `fqdn_id`がNULLの場合にどの顧客に対する設定か判別できなくなる
+- 機能要件の見落とし
+
+**✅ 良い例**: 設計変更時に機能要件を再確認し、必要なカラムを維持する
+
+```sql
+-- customer_idを維持して、fqdn_idがNULLの場合でも顧客を特定できる
+CREATE TABLE customer_signature_group_settings (
+    customer_id BIGINT UNSIGNED NOT NULL,  -- 必須：fqdn_idがNULLの場合でも顧客を特定
+    fqdn_id BIGINT UNSIGNED NULL,  -- NULLの場合は顧客全体
+    ...
+);
+```
+
+**理由**:
+- 既存の機能要件を満たすことができる
+- 設計変更時の影響範囲を明確にできる
+- 実装時の混乱を防ぐことができる
+
+### 実装チェックリスト
+
+- [ ] 意図的な非正規化がある場合、その理由と整合性維持方法をドキュメントに明記する
+- [ ] 設計変更時に既存の機能要件を再確認し、必要なカラムを維持する
+- [ ] 冗長なカラムがある場合、その存在理由を明確にする
+- [ ] データ整合性維持の方法（アプリケーションロジック、トリガー、整合性チェック）を選択し、ドキュメント化する
+
+**参照**: PR #37 - Issue MWD-77: Task 2.1: ER図作成（Gemini Code Assistレビュー指摘 - 第3回）
+
+---

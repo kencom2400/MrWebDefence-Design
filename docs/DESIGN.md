@@ -1300,32 +1300,434 @@ MySQL 8.4系を使用し、utf8mb4文字コードで実装します。Flywayを�
 
 #### 3.2.3.1 ユーザー関連
 
-```
-users (1) ──< (N) user_roles (N) >── (1) roles
-  │
-  └──< (N) sessions
-  │
-  └──< (N) ip_allowlist (user_idで関連)
+```mermaid
+erDiagram
+    users ||--o{ user_roles : "has"
+    roles ||--o{ user_roles : "assigned_to"
+    users ||--o{ sessions : "has"
+    users ||--o{ ip_allowlist : "has"
+    customers ||--o{ users : "has"
+    roles ||--o{ ip_allowlist : "applies_to"
+    customers ||--o{ ip_allowlist : "has"
+    fqdns ||--o{ ip_allowlist : "has"
+    
+    users {
+        bigint_unsigned id PK
+        varchar email UK
+        varchar password_hash
+        varchar name
+        bigint_unsigned customer_id FK
+        boolean mfa_enabled
+        varchar mfa_secret
+        text mfa_backup_codes
+        datetime password_changed_at
+        datetime last_login_at
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    
+    roles {
+        bigint_unsigned id PK
+        varchar name UK
+        text description
+        datetime created_at
+        datetime updated_at
+    }
+    
+    user_roles {
+        bigint_unsigned id PK
+        bigint_unsigned user_id FK
+        bigint_unsigned role_id FK
+        datetime created_at
+    }
+    
+    sessions {
+        varchar id PK
+        bigint_unsigned user_id FK
+        varchar ip_address
+        varchar user_agent
+        datetime expires_at
+        datetime created_at
+    }
+    
+    ip_allowlist {
+        bigint_unsigned id PK
+        bigint_unsigned user_id FK
+        bigint_unsigned role_id FK
+        bigint_unsigned customer_id FK
+        bigint_unsigned fqdn_id FK
+        varchar ip_address
+        datetime expires_at
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        varchar contact_email
+        boolean is_active
+    }
+    
+    fqdns {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
+        boolean is_active
+    }
 ```
 
 #### 3.2.3.2 顧客・FQDN関連
 
-```
-customers (1) ──< (N) fqdns
-  │
-  └──< (N) customer_signature_group_settings
-  │
-  └──< (N) users (customer_idで関連)
+```mermaid
+erDiagram
+    customers ||--o{ fqdns : "has"
+    customers ||--o{ users : "has"
+    fqdns ||--o{ customer_signature_group_settings : "applies_to"
+    signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    users ||--o{ customer_signature_group_settings : "applied_by"
+    fqdns ||--o{ fqdn_signature_applications : "has"
+    signatures ||--o{ fqdn_signature_applications : "applied_to"
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        varchar contact_email
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    
+    fqdns {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    
+    customer_signature_group_settings {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        bigint_unsigned fqdn_id FK
+        bigint_unsigned group_id FK
+        enum application_status
+        bigint_unsigned applied_by FK
+        datetime applied_at
+        text notes
+    }
+    
+    fqdn_signature_applications {
+        bigint_unsigned id PK
+        bigint_unsigned fqdn_id FK
+        bigint_unsigned signature_id FK
+        bigint_unsigned group_id FK
+        bigint_unsigned group_member_id FK
+        int order
+        boolean is_enabled
+        datetime created_at
+        datetime updated_at
+    }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        boolean is_active
+    }
+    
+    fqdns {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
+        boolean is_active
+    }
+    
+    users {
+        bigint_unsigned id PK
+        varchar email UK
+        varchar name
+        bigint_unsigned customer_id FK
+        boolean is_active
+    }
 ```
 
 #### 3.2.3.3 シグニチャ関連
 
+```mermaid
+erDiagram
+    signatures ||--o{ signature_group_members : "belongs_to"
+    signature_groups ||--o{ signature_group_members : "contains"
+    signatures ||--o{ signature_candidates : "derived_from"
+    signatures ||--o{ signature_applications : "applied_as"
+    users ||--o{ signature_applications : "applies"
+    signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    
+    signatures {
+        bigint_unsigned id PK
+        varchar name
+        text description
+        text content
+        int version
+        enum status
+        datetime created_at
+        datetime updated_at
+    }
+    
+    signature_groups {
+        bigint_unsigned id PK
+        varchar name
+        text description
+        enum application_status
+        int priority
+        datetime created_at
+        datetime updated_at
+    }
+    
+    signature_group_members {
+        bigint_unsigned id PK
+        bigint_unsigned group_id FK
+        bigint_unsigned signature_id FK
+        int order
+        datetime created_at
+    }
+    
+    signature_candidates {
+        bigint_unsigned id PK
+        bigint_unsigned signature_id FK
+        varchar name
+        text description
+        text content
+        enum status
+        json verification_result
+        datetime first_verified_at
+        datetime last_verified_at
+        datetime created_at
+        datetime updated_at
+    }
+    
+    signature_applications {
+        bigint_unsigned id PK
+        bigint_unsigned signature_id FK
+        datetime applied_at
+        bigint_unsigned applied_by FK
+        enum status
+    }
 ```
-signatures (1) ──< (N) signature_group_members (N) >── (1) signature_groups
-  │
-  └──< (N) signature_candidates
-  │
-  └──< (N) signature_applications
+
+#### 3.2.3.4 通知関連
+
+```mermaid
+erDiagram
+    customers ||--o{ notification_channels : "has"
+    customers ||--o{ notification_rules : "has"
+    customers ||--o{ notifications : "generated_for"
+    notification_channels ||--o{ notification_rules : "used_by"
+    notification_rules ||--o{ notifications : "triggers"
+    
+    notification_channels {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        enum channel_type
+        varchar name
+        json config
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    
+    notification_rules {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        bigint_unsigned channel_id FK
+        varchar event_type
+        enum priority
+        int deduplication_window_minutes
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    
+    notifications {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        bigint_unsigned rule_id FK
+        varchar event_type
+        enum priority
+        enum status
+        int retry_count
+        datetime sent_at
+        datetime created_at
+    }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        boolean is_active
+    }
+```
+
+#### 3.2.3.5 設定関連
+
+```mermaid
+erDiagram
+    password_policy {
+        bigint_unsigned id PK
+        int min_length
+        boolean require_uppercase
+        boolean require_lowercase
+        boolean require_digit
+        boolean require_special
+        int expiration_days
+        int expiration_warning_days
+        int history_count
+        datetime created_at
+        datetime updated_at
+    }
+    
+    batch_schedules {
+        bigint_unsigned id PK
+        varchar schedule_type UK
+        time schedule_time
+        boolean is_enabled
+        datetime created_at
+        datetime updated_at
+    }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        boolean is_active
+    }
+    
+    fqdns {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
+        boolean is_active
+    }
+    
+    users {
+        bigint_unsigned id PK
+        varchar email UK
+        varchar name
+        bigint_unsigned customer_id FK
+        boolean is_active
+    }
+```
+
+#### 3.2.3.6 全体ER図
+
+```mermaid
+erDiagram
+    %% ユーザー関連
+    users ||--o{ user_roles : "has"
+    roles ||--o{ user_roles : "assigned_to"
+    users ||--o{ sessions : "has"
+    users ||--o{ ip_allowlist : "has"
+    roles ||--o{ ip_allowlist : "applies_to"
+    
+    %% 顧客・FQDN関連
+    customers ||--o{ fqdns : "has"
+    customers ||--o{ users : "has"
+    customers ||--o{ ip_allowlist : "has"
+    fqdns ||--o{ ip_allowlist : "has"
+    
+    %% シグニチャ関連
+    signatures ||--o{ signature_group_members : "belongs_to"
+    signature_groups ||--o{ signature_group_members : "contains"
+    signatures ||--o{ signature_candidates : "derived_from"
+    signatures ||--o{ signature_applications : "applied_as"
+    users ||--o{ signature_applications : "applies"
+    
+    %% 顧客別シグニチャグループ設定
+    customers ||--o{ customer_signature_group_settings : "has"
+    fqdns ||--o{ customer_signature_group_settings : "applies_to"
+    signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    users ||--o{ customer_signature_group_settings : "applied_by"
+    fqdns ||--o{ fqdn_signature_applications : "has"
+    signatures ||--o{ fqdn_signature_applications : "applied_to"
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
+    
+    %% 通知関連
+    customers ||--o{ notification_channels : "has"
+    customers ||--o{ notification_rules : "has"
+    customers ||--o{ notifications : "generated_for"
+    notification_channels ||--o{ notification_rules : "used_by"
+    notification_rules ||--o{ notifications : "triggers"
+    
+    %% 設定関連
+    password_policy {
+        bigint_unsigned id PK
+        int min_length
+        boolean require_uppercase
+        boolean require_lowercase
+        boolean require_digit
+        boolean require_special
+    }
+    
+    batch_schedules {
+        bigint_unsigned id PK
+        varchar schedule_type UK
+        time schedule_time
+        boolean is_enabled
+    }
+    
+    users {
+        bigint_unsigned id PK
+        varchar email UK
+        varchar password_hash
+        varchar name
+        bigint_unsigned customer_id FK
+        boolean mfa_enabled
+        boolean is_active
+    }
+    
+    roles {
+        bigint_unsigned id PK
+        varchar name UK
+    }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        boolean is_active
+    }
+    
+    fqdns {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
+    }
+    
+    signatures {
+        bigint_unsigned id PK
+        varchar name
+        enum status
+    }
+    
+    signature_groups {
+        bigint_unsigned id PK
+        varchar name
+        enum application_status
+    }
+    
+    notification_channels {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        enum channel_type
+    }
+    
+    notification_rules {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        bigint_unsigned channel_id FK
+    }
 ```
 
 ### 3.2.4 テーブル定義書
@@ -1546,6 +1948,43 @@ signatures (1) ──< (N) signature_group_members (N) >── (1) signature_gro
 - INDEX (fqdn_id)
 - INDEX (group_id)
 
+**説明**: FQDNに対してシグニチャグループを適用するかどうかを管理するテーブル。シグニチャの順序は管理しない。`fqdn_id`がNULLの場合は、`customer_id`で指定された顧客全体に対してシグニチャグループを適用する設定となる。`customer_id`は必須であり、`fqdn_id`がNULLの場合でもどの顧客に対する設定かを判別できる。
+
+##### fqdn_signature_applications（FQDN別シグニチャ適用順序）
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| fqdn_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | FQDN ID |
+| signature_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | シグニチャID |
+| group_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | シグニチャグループID（起因元グループ） |
+| group_member_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | シグニチャグループメンバーID（起因元メンバー） |
+| order | INT | NOT NULL | 適用順序（小さい値が先に適用） |
+| is_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効フラグ |
+| created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
+| updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
+
+**インデックス**:
+- PRIMARY KEY (id)
+- UNIQUE KEY (fqdn_id, group_member_id)
+- INDEX (fqdn_id)
+- INDEX (fqdn_id, order)
+- INDEX (signature_id)
+- INDEX (group_id)
+- INDEX (group_member_id)
+- INDEX (is_enabled)
+
+**説明**: FQDNに対して適用されるシグニチャの順序と有効/無効を管理するテーブル。`order`カラムで適用順序を定義し、`is_enabled`で有効/無効を制御する。`group_id`と`group_member_id`により、どのシグニチャグループのどのメンバーに起因しているかを判別できる。これにより、グループの削除・変更時に影響を受けるレコードを特定し、変更を伝搬できる。
+
+**注意事項**:
+- `group_member_id`は`signature_group_members`テーブルの主キーであり、既に`group_id`と`signature_id`を一意に特定するため、ユニークキーは`(fqdn_id, group_member_id)`で十分です。
+- `signature_id`と`group_id`カラムは、`group_member_id`から取得可能であるため、理論的には冗長です。しかし、パフォーマンス向上のための意図的な非正規化として保持しています。これにより、`group_member_id`へのJOINなしで`signature_id`や`group_id`に直接アクセスできるため、クエリパフォーマンスが向上します。
+- **データ整合性の維持**: `signature_id`と`group_id`は`group_member_id`と整合性が保たれている必要があります。データ不整合を防ぐため、以下のいずれかの方法で整合性を維持する必要があります：
+  - **アプリケーションロジック**: レコード作成・更新時に、`group_member_id`から`signature_id`と`group_id`を取得して設定する
+  - **データベーストリガー**: INSERT/UPDATE時に自動的に`signature_id`と`group_id`を設定するトリガーを実装する
+  - **定期的な整合性チェック**: バッチ処理などで定期的に整合性をチェックし、不整合があれば修正する
+- 実装時には、上記の整合性維持方法のいずれかを選択し、ドキュメント化してください。
+
 #### 3.2.4.4 設定関連テーブル
 
 ##### password_policy（パスワードポリシー）
@@ -1601,6 +2040,12 @@ signatures (1) ──< (N) signature_group_members (N) >── (1) signature_gro
 - INDEX (customer_id)
 - INDEX (fqdn_id)
 - INDEX (expires_at)
+
+**注意**: `user_id`、`role_id`、`customer_id`、`fqdn_id`はすべてNULL許容です。これらのキーが複数設定された場合の論理は以下の通りです：
+- **優先順位**: より具体的な条件が優先されます（user_id > role_id > customer_id > fqdn_id）
+- **マッチング条件**: 設定されているすべてのキーが一致する場合にのみ、AllowListエントリが適用されます（AND条件）
+- **例**: `user_id=1`と`customer_id=2`が両方設定されている場合、ユーザーIDが1かつ顧客IDが2の場合のみ適用されます
+- **実装時の注意**: アプリケーションレベルで適切なマッチングロジックを実装する必要があります
 
 #### 3.2.4.5 通知関連テーブル
 
@@ -1681,6 +2126,8 @@ signatures (1) ──< (N) signature_group_members (N) >── (1) signature_gro
 
 - `user_roles(user_id, role_id)`: ユニーク制約と検索の両方に対応
 - `customer_signature_group_settings(customer_id, fqdn_id, group_id)`: ユニーク制約
+- `fqdn_signature_applications(fqdn_id, group_member_id)`: ユニーク制約
+- `fqdn_signature_applications(fqdn_id, order)`: 順序での検索を最適化
 
 ### 3.2.7 データベースマイグレーション設計（Flyway）
 
