@@ -2293,7 +2293,9 @@ V{version}__{description}.sql
 
 **test環境**:
 - **実行タイミング**: デプロイ時に全マイグレーションを必ず実施
-- **実行方法**: アプリケーション起動時にFlywayが自動的に全マイグレーションを実行
+- **実行方法**: CI/CDパイプラインにて`flyway clean`でデータベースを初期化後、`flyway migrate`で全マイグレーションを実行
+  - `flyway clean`: データベースをクリーンアップ（全テーブル削除）
+  - `flyway migrate`: 全マイグレーションを実行（クリーンアップ後は全マイグレーションが適用される）
 - **確認方法**: CI/CDパイプラインでマイグレーション実行結果を確認
 - **注意事項**: テスト環境の整合性を保つため、常に最新のスキーマ状態を維持する
 
@@ -2314,10 +2316,11 @@ V{version}__{description}.sql
 - **方法1: Flywayのロールバック機能を使用**
   - Flywayのundo機能（有料版）を使用してロールバック
   - または、Flywayの`flyway undo`コマンドを使用（有料版）
-- **方法2: ロールバック用SQLをマイグレーションとして管理**
-  - ロールバック用のSQLスクリプトを新しいバージョンとして作成
-  - 例: `V6__rollback_v5_add_index.sql`
-  - ロールバック用SQLスクリプトをマイグレーションスクリプトとして管理
+- **方法2: 変更を取り消すための新規マイグレーションを作成（ロールフォワード）**
+  - 変更を取り消すためのSQLスクリプトを新しいバージョンとして作成
+  - 例: `V6__rollback_v5_add_index.sql`（V5で追加したインデックスを削除）
+  - この方法は「ロールフォワード」と呼ばれるアプローチで、Flyway有料版の`undo`機能とは異なる
+  - 変更を取り消すためのSQLスクリプトをマイグレーションスクリプトとして管理
 - **推奨**: 方法2を推奨（Flyway Community Editionでも使用可能）
 
 **本番環境**:
@@ -2385,7 +2388,7 @@ V{version}__{description}.sql
 - 大量データの移行は、パフォーマンスを考慮してバッチ処理で実行
 
 **4. トランザクションの使用**
-- DDL文（CREATE TABLE等）はトランザクション内で実行できない場合がある（MySQLの設定による）
+- DDL文（CREATE TABLE等）は、MySQLでは暗黙的なコミットを引き起こすため、トランザクション内で実行できません（PostgreSQL等、DBによっては可能です）
 - DML文（INSERT、UPDATE等）はトランザクション内で実行する
 - マイグレーション全体をトランザクションで囲む場合は、Flywayの設定で制御
 
@@ -2407,8 +2410,8 @@ src/main/resources/db/migration/
 ├── V1__create_users_table.sql
 ├── V2__create_roles_table.sql
 ├── V3__create_user_roles_table.sql
-├── V4__create_customers_table.sql
-├── V5__create_fqdns_table.sql
+├── V4__add_customer_id_to_users.sql
+├── V5__create_index_on_fqdns.sql
 └── ...
 ```
 
