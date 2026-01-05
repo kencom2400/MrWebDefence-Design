@@ -2893,6 +2893,8 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
 
 #### POST /api/v1/auth/login
 
+**説明**: ユーザーのログインを処理し、セッションを作成します。
+
 **リクエスト**:
 ```json
 {
@@ -2901,6 +2903,21 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
 }
 ```
 
+**リクエストバリデーション**:
+- `email`: 必須、文字列、メールアドレス形式、最大255文字
+- `password`: 必須、文字列、最小8文字、最大128文字
+
+**処理フロー**:
+1. リクエストバリデーション
+2. ユーザーをemailで検索（`users`テーブル）
+3. ユーザーが存在しない、または無効化されている場合はエラー
+4. パスワードをbcryptで検証
+5. IP AllowListチェック（設定されている場合）
+6. セッションIDを生成（32文字のランダム文字列）
+7. セッション情報をRedisに保存（TTL: 30分）
+8. セッションクッキーを設定（HttpOnly, Secure, SameSite=Strict）
+9. ユーザー情報とセッション情報を返却
+
 **レスポンス** (200):
 ```json
 {
@@ -2908,11 +2925,26 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
     "id": 1,
     "email": "user@example.com",
     "name": "User Name",
-    "roles": ["customer_admin"]
+    "roles": ["customer_admin"],
+    "customer_id": 1
   },
   "session": {
     "id": "session_id",
     "expires_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+**エラーレスポンス** (400):
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request parameters",
+    "details": {
+      "email": "Email is required",
+      "password": "Password must be at least 8 characters"
+    }
   }
 }
 ```
@@ -2927,12 +2959,47 @@ REST APIを採用し、OpenAPI（Swagger）形式で仕様を定義します。A
 }
 ```
 
+**エラーレスポンス** (403):
+```json
+{
+  "error": {
+    "code": "IP_NOT_ALLOWED",
+    "message": "Your IP address is not allowed"
+  }
+}
+```
+
+**セキュリティ考慮事項**:
+- ログイン試行回数の制限（レート制限: 5回/分/IP）
+- パスワード検証失敗時は、ユーザーが存在するかどうかを明示しない（タイミング攻撃対策）
+- セッションIDは暗号学的に安全な乱数生成器を使用
+
 #### POST /api/v1/auth/logout
+
+**説明**: 現在のセッションを無効化し、ログアウトします。
+
+**認証**: 必須（セッションクッキー）
+
+**処理フロー**:
+1. セッションクッキーからセッションIDを取得
+2. Redisからセッション情報を削除
+3. セッションクッキーを削除（有効期限を過去に設定）
+4. 成功レスポンスを返却
 
 **レスポンス** (200):
 ```json
 {
   "message": "Logged out successfully"
+}
+```
+
+**エラーレスポンス** (401):
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Authentication required"
+  }
 }
 ```
 
@@ -3148,6 +3215,204 @@ components:
 - **コスト**: 12（推奨値）
 - **ソルト**: bcryptが自動生成
 
+#### 3.4.2.4 パスワードハッシュ化の実装詳細
+
+##### bcryptの実装方法
+
+- **コストパラメータ**: 12（推奨値）
+  - コストが高いほど計算時間が長くなり、ブルートフォース攻撃に対する耐性が向上
+  - コスト12は、2024年時点でセキュリティとパフォーマンスのバランスが良い値
+  - 将来的にハードウェア性能が向上した場合は、コストを上げることを検討
+- **ハッシュ形式**: bcryptは自動的にソルトを含む形式で保存される
+  - 形式: `$2b$12$...`（`$2b$`はbcryptのバージョン、`12`はコスト）
+  - ソルトは自動生成され、ハッシュ値に含まれるため、別途保存する必要はない
+
+##### パスワードハッシュ化の実装例
+
+- **実装例（Python + bcrypt）**:
+  ```python
+  import bcrypt
+  
+  # パスワードをハッシュ化
+  def hash_password(password: str) -> str:
+      # パスワードをバイト列に変換
+      password_bytes = password.encode('utf-8')
+      # bcryptでハッシュ化（コスト12）
+      hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt(rounds=12))
+      # 文字列として返却
+      return hashed.decode('utf-8')
+  
+  # パスワードを検証
+  def verify_password(password: str, hashed: str) -> bool:
+      # パスワードとハッシュをバイト列に変換
+      password_bytes = password.encode('utf-8')
+      hashed_bytes = hashed.encode('utf-8')
+      # bcryptで検証
+      return bcrypt.checkpw(password_bytes, hashed_bytes)
+  
+  # 使用例
+  password = "MySecurePassword123!"
+  hashed = hash_password(password)
+  # データベースに保存: users.password = hashed
+  
+  # ログイン時の検証
+  is_valid = verify_password("MySecurePassword123!", hashed)
+  ```
+- **実装例（Go + golang.org/x/crypto/bcrypt）**:
+  ```go
+  import (
+      "golang.org/x/crypto/bcrypt"
+  )
+  
+  // パスワードをハッシュ化
+  func HashPassword(password string) (string, error) {
+      // bcryptでハッシュ化（コスト12）
+      hashed, err := bcrypt.GenerateFromPassword(
+          []byte(password),
+          bcrypt.DefaultCost, // デフォルトは10、12にする場合はbcrypt.Cost(12)
+      )
+      if err != nil {
+          return "", err
+      }
+      return string(hashed), nil
+  }
+  
+  // パスワードを検証
+  func VerifyPassword(password, hashed string) bool {
+      err := bcrypt.CompareHashAndPassword(
+          []byte(hashed),
+          []byte(password),
+      )
+      return err == nil
+  }
+  
+  // 使用例
+  password := "MySecurePassword123!"
+  hashed, err := HashPassword(password)
+  if err != nil {
+      // エラーハンドリング
+  }
+  // データベースに保存: user.Password = hashed
+  
+  // ログイン時の検証
+  isValid := VerifyPassword("MySecurePassword123!", hashed)
+  ```
+
+##### パスワード検証のタイミング攻撃対策
+
+- **問題**: パスワード検証の処理時間の違いから、ユーザーが存在するかどうかを推測される可能性がある
+- **対策**: ユーザーが存在しない場合でも、ダミーのハッシュ値で検証を実行し、処理時間を均一化する
+- **実装例（Python）**:
+  ```python
+  import bcrypt
+  import time
+  
+  # ダミーハッシュ（常に同じ値を使用）
+  DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt(rounds=12)).decode('utf-8')
+  
+  def verify_password_safe(password: str, hashed: str, user_exists: bool) -> bool:
+      """
+      タイミング攻撃対策を考慮したパスワード検証
+      
+      Args:
+          password: 検証するパスワード
+          hashed: ハッシュ値（ユーザーが存在する場合）
+          user_exists: ユーザーが存在するかどうか
+      
+      Returns:
+          パスワードが正しい場合True、それ以外False
+      """
+      # ユーザーが存在しない場合でも、ダミーハッシュで検証を実行
+      target_hash = hashed if user_exists else DUMMY_HASH
+      
+      # パスワード検証（処理時間を均一化）
+      start_time = time.time()
+      is_valid = bcrypt.checkpw(
+          password.encode('utf-8'),
+          target_hash.encode('utf-8')
+      )
+      elapsed_time = time.time() - start_time
+      
+      # 処理時間を均一化（最小処理時間を保証）
+      min_processing_time = 0.1  # 100ms
+      if elapsed_time < min_processing_time:
+          time.sleep(min_processing_time - elapsed_time)
+      
+      # ユーザーが存在しない場合は常にFalse
+      return is_valid and user_exists
+  ```
+- **実装例（Go）**:
+  ```go
+  import (
+      "time"
+      "golang.org/x/crypto/bcrypt"
+  )
+  
+  // ダミーハッシュ（常に同じ値を使用）
+  var dummyHash = "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqBWVHxkd0"
+  
+  // タイミング攻撃対策を考慮したパスワード検証
+  func VerifyPasswordSafe(password, hashed string, userExists bool) bool {
+      // ユーザーが存在しない場合でも、ダミーハッシュで検証を実行
+      targetHash := hashed
+      if !userExists {
+          targetHash = dummyHash
+      }
+      
+      // パスワード検証（処理時間を均一化）
+      startTime := time.Now()
+      err := bcrypt.CompareHashAndPassword([]byte(targetHash), []byte(password))
+      elapsedTime := time.Since(startTime)
+      
+      // 処理時間を均一化（最小処理時間を保証）
+      minProcessingTime := 100 * time.Millisecond
+      if elapsedTime < minProcessingTime {
+          time.Sleep(minProcessingTime - elapsedTime)
+      }
+      
+      // ユーザーが存在しない場合は常にFalse
+      return err == nil && userExists
+  }
+  ```
+
+##### パスワード変更時の実装
+
+- **処理フロー**:
+  1. 現在のパスワードを検証
+  2. 新しいパスワードがパスワードポリシーに準拠しているか確認
+  3. 新しいパスワードが過去のパスワードと重複していないか確認（`password_history`テーブル）
+  4. 新しいパスワードをハッシュ化して保存
+  5. 過去のパスワードを`password_history`テーブルに保存（再利用制限のため）
+  6. すべてのセッションを無効化（セキュリティのため）
+- **実装例（Python）**:
+  ```python
+  def change_password(user_id: int, current_password: str, new_password: str):
+      # 1. 現在のパスワードを検証
+      user = get_user_by_id(user_id)
+      if not verify_password(current_password, user.password):
+          raise ValueError("Current password is incorrect")
+      
+      # 2. 新しいパスワードがパスワードポリシーに準拠しているか確認
+      password_policy = get_password_policy(user.customer_id)
+      validate_password_policy(new_password, password_policy)
+      
+      # 3. 過去のパスワードと重複していないか確認
+      password_history = get_password_history(user_id, limit=password_policy.reuse_limit)
+      for old_hashed in password_history:
+          if verify_password(new_password, old_hashed):
+              raise ValueError("New password cannot be the same as a previous password")
+      
+      # 4. 新しいパスワードをハッシュ化して保存
+      new_hashed = hash_password(new_password)
+      update_user_password(user_id, new_hashed)
+      
+      # 5. 過去のパスワードを保存
+      add_password_history(user_id, user.password)
+      
+      # 6. すべてのセッションを無効化
+      delete_all_user_sessions(user_id)
+  ```
+
 #### 3.4.2.3 パスワードポリシー
 
 - **デフォルト**: 8文字以上
@@ -3262,6 +3527,369 @@ components:
 - **値**: JSON形式でユーザー情報を保存
 - **TTL**: セッションタイムアウト時間
 
+#### 3.4.6.4 セッション管理の実装詳細
+
+##### セッションID生成
+
+- **生成方法**: 暗号学的に安全な乱数生成器（CSPRNG）を使用
+- **形式**: 32文字の16進数文字列（256ビット相当）
+- **実装例（Python）**:
+  ```python
+  import secrets
+  session_id = secrets.token_hex(16)  # 32文字の16進数文字列
+  ```
+- **実装例（Go）**:
+  ```go
+  import (
+      "crypto/rand"
+      "encoding/hex"
+  )
+  bytes := make([]byte, 16)
+  rand.Read(bytes)
+  session_id := hex.EncodeToString(bytes)  // 32文字の16進数文字列
+  ```
+
+##### Redisセッションストレージ実装
+
+- **キー形式**: `session:{session_id}`
+- **値の構造（JSON）**:
+  ```json
+  {
+    "user_id": 1,
+    "email": "user@example.com",
+    "customer_id": 1,
+    "roles": ["customer_admin"],
+    "created_at": "2024-01-01T00:00:00Z",
+    "last_accessed_at": "2024-01-01T00:00:00Z",
+    "ip_address": "192.168.1.1"
+  }
+  ```
+- **TTL設定**: セッションタイムアウト時間（デフォルト: 1800秒 = 30分）
+- **実装例（Python + redis-py）**:
+  ```python
+  import redis
+  import json
+  from datetime import datetime, timedelta
+  
+  redis_client = redis.Redis(host='localhost', port=6379, db=0)
+  
+  def create_session(session_id, user_data, ttl=1800):
+      session_data = {
+          **user_data,
+          "created_at": datetime.utcnow().isoformat(),
+          "last_accessed_at": datetime.utcnow().isoformat()
+      }
+      redis_client.setex(
+          f"session:{session_id}",
+          ttl,
+          json.dumps(session_data)
+      )
+  
+  def get_session(session_id):
+      data = redis_client.get(f"session:{session_id}")
+      if data:
+          return json.loads(data)
+      return None
+  
+  def update_session_ttl(session_id, ttl=1800):
+      redis_client.expire(f"session:{session_id}", ttl)
+      # last_accessed_atも更新
+      data = redis_client.get(f"session:{session_id}")
+      if data:
+          session_data = json.loads(data)
+          session_data["last_accessed_at"] = datetime.utcnow().isoformat()
+          redis_client.setex(
+              f"session:{session_id}",
+              ttl,
+              json.dumps(session_data)
+          )
+  
+  def delete_session(session_id):
+      redis_client.delete(f"session:{session_id}")
+  
+  def delete_all_user_sessions(user_id):
+      # パターンマッチで検索（本番環境ではSCANを使用）
+      keys = redis_client.keys(f"session:*")
+      for key in keys:
+          data = redis_client.get(key)
+          if data:
+              session_data = json.loads(data)
+              if session_data.get("user_id") == user_id:
+                  redis_client.delete(key)
+  ```
+- **実装例（Go + go-redis）**:
+  ```go
+  import (
+      "context"
+      "encoding/json"
+      "time"
+      "github.com/redis/go-redis/v9"
+  )
+  
+  type SessionData struct {
+      UserID        int      `json:"user_id"`
+      Email         string   `json:"email"`
+      CustomerID    *int     `json:"customer_id"`
+      Roles         []string `json:"roles"`
+      CreatedAt     string   `json:"created_at"`
+      LastAccessedAt string  `json:"last_accessed_at"`
+      IPAddress     string   `json:"ip_address"`
+  }
+  
+  func CreateSession(ctx context.Context, rdb *redis.Client, sessionID string, userData SessionData, ttl time.Duration) error {
+      userData.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+      userData.LastAccessedAt = time.Now().UTC().Format(time.RFC3339)
+      
+      data, err := json.Marshal(userData)
+      if err != nil {
+          return err
+      }
+      
+      return rdb.SetEx(ctx, "session:"+sessionID, data, ttl).Err()
+  }
+  
+  func GetSession(ctx context.Context, rdb *redis.Client, sessionID string) (*SessionData, error) {
+      data, err := rdb.Get(ctx, "session:"+sessionID).Bytes()
+      if err == redis.Nil {
+          return nil, nil
+      }
+      if err != nil {
+          return nil, err
+      }
+      
+      var session SessionData
+      if err := json.Unmarshal(data, &session); err != nil {
+          return nil, err
+      }
+      
+      return &session, nil
+  }
+  
+  func UpdateSessionTTL(ctx context.Context, rdb *redis.Client, sessionID string, ttl time.Duration) error {
+      // TTLを更新
+      if err := rdb.Expire(ctx, "session:"+sessionID, ttl).Err(); err != nil {
+          return err
+      }
+      
+      // last_accessed_atを更新
+      data, err := rdb.Get(ctx, "session:"+sessionID).Bytes()
+      if err != nil {
+          return err
+      }
+      
+      var session SessionData
+      if err := json.Unmarshal(data, &session); err != nil {
+          return err
+      }
+      
+      session.LastAccessedAt = time.Now().UTC().Format(time.RFC3339)
+      updatedData, err := json.Marshal(session)
+      if err != nil {
+          return err
+      }
+      
+      return rdb.SetEx(ctx, "session:"+sessionID, updatedData, ttl).Err()
+  }
+  
+  func DeleteSession(ctx context.Context, rdb *redis.Client, sessionID string) error {
+      return rdb.Del(ctx, "session:"+sessionID).Err()
+  }
+  
+  func DeleteAllUserSessions(ctx context.Context, rdb *redis.Client, userID int) error {
+      // パターンマッチで検索（本番環境ではSCANを使用）
+      keys, err := rdb.Keys(ctx, "session:*").Result()
+      if err != nil {
+          return err
+      }
+      
+      for _, key := range keys {
+          data, err := rdb.Get(ctx, key).Bytes()
+          if err != nil {
+              continue
+          }
+          
+          var session SessionData
+          if err := json.Unmarshal(data, &session); err != nil {
+              continue
+          }
+          
+          if session.UserID == userID {
+              if err := rdb.Del(ctx, key).Err(); err != nil {
+                  return err
+              }
+          }
+      }
+      
+      return nil
+  }
+  ```
+
+##### セッションクッキー設定
+
+- **クッキー名**: `session_id`
+- **設定項目**:
+  - `HttpOnly`: `true`（JavaScriptからアクセス不可、XSS対策）
+  - `Secure`: `true`（HTTPSのみ送信、中間者攻撃対策）
+  - `SameSite`: `Strict`（CSRF対策）
+  - `Path`: `/`（全パスで有効）
+  - `Max-Age`: セッションタイムアウト時間（秒、デフォルト: 1800）
+- **実装例（Python + FastAPI）**:
+  ```python
+  from fastapi import Response
+  
+  def set_session_cookie(response: Response, session_id: str, max_age: int = 1800):
+      response.set_cookie(
+          key="session_id",
+          value=session_id,
+          max_age=max_age,
+          httponly=True,
+          secure=True,
+          samesite="strict",
+          path="/"
+      )
+  
+  def delete_session_cookie(response: Response):
+      response.delete_cookie(
+          key="session_id",
+          httponly=True,
+          secure=True,
+          samesite="strict",
+          path="/"
+      )
+  ```
+- **実装例（Go + Gin）**:
+  ```go
+  import (
+      "time"
+      "github.com/gin-gonic/gin"
+  )
+  
+  func SetSessionCookie(c *gin.Context, sessionID string, maxAge int) {
+      c.SetCookie(
+          "session_id",
+          sessionID,
+          maxAge,
+          "/",
+          "",
+          true,  // Secure
+          true,  // HttpOnly
+      )
+  }
+  
+  func DeleteSessionCookie(c *gin.Context) {
+      c.SetCookie(
+          "session_id",
+          "",
+          -1,
+          "/",
+          "",
+          true,  // Secure
+          true,  // HttpOnly
+      )
+  }
+  ```
+
+##### セッション検証ミドルウェア
+
+- **処理フロー**:
+  1. リクエストからセッションクッキーを取得
+  2. セッションIDが存在しない場合は401エラー
+  3. Redisからセッション情報を取得
+  4. セッションが存在しない、または期限切れの場合は401エラー
+  5. セッションの有効期限を更新（TTL延長）
+  6. セッション情報をリクエストコンテキストに設定
+  7. 次のハンドラに処理を委譲
+- **実装例（Python + FastAPI）**:
+  ```python
+  from fastapi import Request, HTTPException, status
+  from fastapi.security import HTTPBearer
+  import redis
+  import json
+  
+  redis_client = redis.Redis(host='localhost', port=6379, db=0)
+  
+  async def session_middleware(request: Request, call_next):
+      # 認証不要なエンドポイントをスキップ
+      if request.url.path in ["/api/v1/auth/login", "/api/v1/health"]:
+          return await call_next(request)
+      
+      # セッションクッキーを取得
+      session_id = request.cookies.get("session_id")
+      if not session_id:
+          raise HTTPException(
+              status_code=status.HTTP_401_UNAUTHORIZED,
+              detail="Session not found"
+          )
+      
+      # Redisからセッション情報を取得
+      session_data = get_session(session_id)
+      if not session_data:
+          raise HTTPException(
+              status_code=status.HTTP_401_UNAUTHORIZED,
+              detail="Session expired or invalid"
+          )
+      
+      # セッションの有効期限を更新
+      update_session_ttl(session_id, ttl=1800)
+      
+      # セッション情報をリクエストコンテキストに設定
+      request.state.user_id = session_data["user_id"]
+      request.state.email = session_data["email"]
+      request.state.customer_id = session_data.get("customer_id")
+      request.state.roles = session_data["roles"]
+      
+      response = await call_next(request)
+      return response
+  ```
+- **実装例（Go + Gin）**:
+  ```go
+  import (
+      "net/http"
+      "github.com/gin-gonic/gin"
+  )
+  
+  func SessionMiddleware(rdb *redis.Client) gin.HandlerFunc {
+      return func(c *gin.Context) {
+          // 認証不要なエンドポイントをスキップ
+          if c.Request.URL.Path == "/api/v1/auth/login" || c.Request.URL.Path == "/api/v1/health" {
+              c.Next()
+              return
+          }
+          
+          // セッションクッキーを取得
+          sessionID, err := c.Cookie("session_id")
+          if err != nil {
+              c.JSON(http.StatusUnauthorized, gin.H{"error": "Session not found"})
+              c.Abort()
+              return
+          }
+          
+          // Redisからセッション情報を取得
+          session, err := GetSession(c.Request.Context(), rdb, sessionID)
+          if err != nil || session == nil {
+              c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired or invalid"})
+              c.Abort()
+              return
+          }
+          
+          // セッションの有効期限を更新
+          if err := UpdateSessionTTL(c.Request.Context(), rdb, sessionID, 30*time.Minute); err != nil {
+              c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session"})
+              c.Abort()
+              return
+          }
+          
+          // セッション情報をコンテキストに設定
+          c.Set("user_id", session.UserID)
+          c.Set("email", session.Email)
+          c.Set("customer_id", session.CustomerID)
+          c.Set("roles", session.Roles)
+          
+          c.Next()
+      }
+  }
+  ```
+
 ### 3.4.7 実装方針
 
 1. **認証ミドルウェア**: すべてのAPIリクエストで認証をチェック
@@ -3275,6 +3903,275 @@ components:
 - MFA秘密鍵は暗号化して保存
 - パスワードは平文で保存しない
 - ログイン試行回数の制限（将来拡張）
+
+### 3.4.9 実装手順
+
+#### 3.4.9.1 必要なライブラリ・依存関係
+
+##### Python（FastAPI）の場合
+
+- **必須ライブラリ**:
+  - `fastapi`: Webフレームワーク
+  - `uvicorn`: ASGIサーバー
+  - `redis`: Redisクライアント
+  - `bcrypt`: パスワードハッシュ化
+  - `python-jose`: JWTトークン処理（将来のAPIトークン認証用）
+  - `python-multipart`: フォームデータ処理
+  - `pydantic`: データバリデーション
+  - `sqlalchemy`: ORM
+  - `pymysql`または`mysqlclient`: MySQLドライバ
+
+- **インストール例**:
+  ```bash
+  pip install fastapi uvicorn redis bcrypt python-jose python-multipart pydantic sqlalchemy pymysql
+  ```
+
+##### Go（Gin）の場合
+
+- **必須パッケージ**:
+  - `github.com/gin-gonic/gin`: Webフレームワーク
+  - `github.com/redis/go-redis/v9`: Redisクライアント
+  - `golang.org/x/crypto/bcrypt`: パスワードハッシュ化
+  - `github.com/golang-jwt/jwt/v5`: JWTトークン処理（将来のAPIトークン認証用）
+  - `gorm.io/gorm`: ORM
+  - `gorm.io/driver/mysql`: MySQLドライバ
+
+- **インストール例**:
+  ```bash
+  go get github.com/gin-gonic/gin
+  go get github.com/redis/go-redis/v9
+  go get golang.org/x/crypto/bcrypt
+  go get github.com/golang-jwt/jwt/v5
+  go get gorm.io/gorm
+  go get gorm.io/driver/mysql
+  ```
+
+#### 3.4.9.2 設定項目
+
+##### 環境変数
+
+- **データベース接続**:
+  - `DB_HOST`: データベースホスト（デフォルト: `localhost`）
+  - `DB_PORT`: データベースポート（デフォルト: `3306`）
+  - `DB_USER`: データベースユーザー名
+  - `DB_PASSWORD`: データベースパスワード
+  - `DB_NAME`: データベース名
+
+- **Redis接続**:
+  - `REDIS_HOST`: Redisホスト（デフォルト: `localhost`）
+  - `REDIS_PORT`: Redisポート（デフォルト: `6379`）
+  - `REDIS_PASSWORD`: Redisパスワード（オプション）
+  - `REDIS_DB`: Redisデータベース番号（デフォルト: `0`）
+
+- **セッション設定**:
+  - `SESSION_TTL`: セッションタイムアウト時間（秒、デフォルト: `1800`）
+  - `SESSION_COOKIE_NAME`: セッションクッキー名（デフォルト: `session_id`）
+
+- **セキュリティ設定**:
+  - `BCRYPT_COST`: bcryptコスト（デフォルト: `12`）
+  - `HTTPS_ONLY`: HTTPS必須フラグ（デフォルト: `true`）
+
+##### 設定ファイル例（Python）
+
+```python
+# config.py
+import os
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    # データベース設定
+    db_host: str = os.getenv("DB_HOST", "localhost")
+    db_port: int = int(os.getenv("DB_PORT", "3306"))
+    db_user: str = os.getenv("DB_USER", "")
+    db_password: str = os.getenv("DB_PASSWORD", "")
+    db_name: str = os.getenv("DB_NAME", "")
+    
+    # Redis設定
+    redis_host: str = os.getenv("REDIS_HOST", "localhost")
+    redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
+    redis_password: str = os.getenv("REDIS_PASSWORD", "")
+    redis_db: int = int(os.getenv("REDIS_DB", "0"))
+    
+    # セッション設定
+    session_ttl: int = int(os.getenv("SESSION_TTL", "1800"))
+    session_cookie_name: str = os.getenv("SESSION_COOKIE_NAME", "session_id")
+    
+    # セキュリティ設定
+    bcrypt_cost: int = int(os.getenv("BCRYPT_COST", "12"))
+    https_only: bool = os.getenv("HTTPS_ONLY", "true").lower() == "true"
+    
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+##### 設定ファイル例（Go）
+
+```go
+// config/config.go
+package config
+
+import (
+    "os"
+    "strconv"
+)
+
+type Config struct {
+    // データベース設定
+    DBHost     string
+    DBPort     int
+    DBUser     string
+    DBPassword string
+    DBName     string
+    
+    // Redis設定
+    RedisHost     string
+    RedisPort     int
+    RedisPassword string
+    RedisDB       int
+    
+    // セッション設定
+    SessionTTL        int
+    SessionCookieName string
+    
+    // セキュリティ設定
+    BcryptCost int
+    HTTPSOnly  bool
+}
+
+func LoadConfig() *Config {
+    return &Config{
+        DBHost:     getEnv("DB_HOST", "localhost"),
+        DBPort:     getEnvInt("DB_PORT", 3306),
+        DBUser:     getEnv("DB_USER", ""),
+        DBPassword: getEnv("DB_PASSWORD", ""),
+        DBName:     getEnv("DB_NAME", ""),
+        
+        RedisHost:     getEnv("REDIS_HOST", "localhost"),
+        RedisPort:     getEnvInt("REDIS_PORT", 6379),
+        RedisPassword: getEnv("REDIS_PASSWORD", ""),
+        RedisDB:       getEnvInt("REDIS_DB", 0),
+        
+        SessionTTL:        getEnvInt("SESSION_TTL", 1800),
+        SessionCookieName:  getEnv("SESSION_COOKIE_NAME", "session_id"),
+        
+        BcryptCost: getEnvInt("BCRYPT_COST", 12),
+        HTTPSOnly:  getEnvBool("HTTPS_ONLY", true),
+    }
+}
+
+func getEnv(key, defaultValue string) string {
+    if value := os.Getenv(key); value != "" {
+        return value
+    }
+    return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+    if value := os.Getenv(key); value != "" {
+        if intValue, err := strconv.Atoi(value); err == nil {
+            return intValue
+        }
+    }
+    return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+    if value := os.Getenv(key); value != "" {
+        if boolValue, err := strconv.ParseBool(value); err == nil {
+            return boolValue
+        }
+    }
+    return defaultValue
+}
+```
+
+#### 3.4.9.3 実装の流れ
+
+##### Phase 1: 基盤実装
+
+1. **データベース接続の確立**
+   - データベース接続プールの設定
+   - ORMの初期化
+
+2. **Redis接続の確立**
+   - Redisクライアントの初期化
+   - 接続確認
+
+3. **パスワードハッシュ化機能の実装**
+   - `hash_password`関数の実装
+   - `verify_password`関数の実装
+   - タイミング攻撃対策の実装
+
+##### Phase 2: 認証機能の実装
+
+1. **ログインAPIの実装** (`POST /api/v1/auth/login`)
+   - リクエストバリデーション
+   - ユーザー検索
+   - パスワード検証
+   - IP AllowListチェック
+   - セッションID生成
+   - セッション情報をRedisに保存
+   - セッションクッキーを設定
+   - レスポンス返却
+
+2. **ログアウトAPIの実装** (`POST /api/v1/auth/logout`)
+   - セッションクッキーからセッションIDを取得
+   - Redisからセッション情報を削除
+   - セッションクッキーを削除
+   - レスポンス返却
+
+##### Phase 3: セッション管理機能の実装
+
+1. **セッション管理ミドルウェアの実装**
+   - セッションクッキーの取得
+   - Redisからのセッション情報取得
+   - セッション有効期限の更新
+   - リクエストコンテキストへのセッション情報設定
+
+2. **セッション無効化機能の実装**
+   - ログアウト時のセッション削除
+   - パスワード変更時の全セッション削除
+   - ユーザー無効化時の全セッション削除
+
+##### Phase 4: テスト
+
+1. **単体テスト**
+   - パスワードハッシュ化・検証のテスト
+   - セッション管理機能のテスト
+
+2. **統合テスト**
+   - ログインAPIのテスト
+   - ログアウトAPIのテスト
+   - セッション管理ミドルウェアのテスト
+
+3. **セキュリティテスト**
+   - タイミング攻撃対策の検証
+   - セッションクッキーの設定確認
+   - IP AllowList機能のテスト
+
+#### 3.4.9.4 実装チェックリスト
+
+- [ ] データベース接続が正常に動作する
+- [ ] Redis接続が正常に動作する
+- [ ] パスワードハッシュ化が正常に動作する（bcrypt、コスト12）
+- [ ] パスワード検証が正常に動作する
+- [ ] タイミング攻撃対策が実装されている
+- [ ] ログインAPIが正常に動作する
+- [ ] ログアウトAPIが正常に動作する
+- [ ] セッションIDが暗号学的に安全な方法で生成される
+- [ ] セッション情報がRedisに保存される
+- [ ] セッションクッキーが適切に設定される（HttpOnly, Secure, SameSite=Strict）
+- [ ] セッション管理ミドルウェアが正常に動作する
+- [ ] セッション有効期限が適切に更新される
+- [ ] セッション無効化が正常に動作する
+- [ ] IP AllowListチェックが正常に動作する
+- [ ] エラーハンドリングが適切に実装されている
+- [ ] ログ出力が適切に実装されている
+- [ ] 単体テストがすべてパスする
+- [ ] 統合テストがすべてパスする
+- [ ] セキュリティテストがすべてパスする
 
 ---
 
