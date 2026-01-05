@@ -5,7 +5,7 @@
 
 # 設定ファイルの読み込み（既に読み込まれている場合はスキップ）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "${SCRIPT_DIR}/config.sh" ] && [ -z "$_CONFIG_LOADED" ]; then
+if [ -f "${SCRIPT_DIR}/config.sh" ] && [ -z "${_CONFIG_LOADED:-}" ]; then
   source "${SCRIPT_DIR}/config.sh" 2>/dev/null || true
 fi
 
