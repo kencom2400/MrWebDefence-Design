@@ -1312,10 +1312,11 @@ erDiagram
     fqdns ||--o{ ip_allowlist : "has"
     
     users {
-        varchar email PK
+        bigint_unsigned id PK
+        varchar email UK
         varchar password_hash
         varchar name
-        varchar customer_name FK
+        bigint_unsigned customer_id FK
         boolean mfa_enabled
         varchar mfa_secret
         text mfa_backup_codes
@@ -1327,21 +1328,23 @@ erDiagram
     }
     
     roles {
-        varchar name PK
+        bigint_unsigned id PK
+        varchar name UK
         text description
         datetime created_at
         datetime updated_at
     }
     
     user_roles {
-        varchar user_email PK_FK
-        varchar role_name PK_FK
+        bigint_unsigned id PK
+        bigint_unsigned user_id FK
+        bigint_unsigned role_id FK
         datetime created_at
     }
     
     sessions {
         varchar id PK
-        varchar user_email FK
+        bigint_unsigned user_id FK
         varchar ip_address
         varchar user_agent
         datetime expires_at
@@ -1350,10 +1353,10 @@ erDiagram
     
     ip_allowlist {
         bigint_unsigned id PK
-        varchar user_email FK
-        varchar role_name FK
-        varchar customer_name FK
-        varchar fqdn FK
+        bigint_unsigned user_id FK
+        bigint_unsigned role_id FK
+        bigint_unsigned customer_id FK
+        bigint_unsigned fqdn_id FK
         varchar ip_address
         datetime expires_at
         boolean is_active
@@ -1373,7 +1376,8 @@ erDiagram
     signature_groups ||--o{ customer_signature_group_settings : "configured_in"
     
     customers {
-        varchar name PK
+        bigint_unsigned id PK
+        varchar name
         varchar contact_email
         boolean is_active
         datetime created_at
@@ -1381,19 +1385,21 @@ erDiagram
     }
     
     fqdns {
-        varchar fqdn PK
-        varchar customer_name FK
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
         boolean is_active
         datetime created_at
         datetime updated_at
     }
     
     customer_signature_group_settings {
-        varchar customer_name PK_FK
-        varchar fqdn PK_FK
-        varchar group_name PK_FK
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        bigint_unsigned fqdn_id FK
+        bigint_unsigned group_id FK
         enum application_status
-        varchar applied_by_email FK
+        bigint_unsigned applied_by FK
         datetime applied_at
         text notes
     }
@@ -1411,17 +1417,19 @@ erDiagram
     signature_groups ||--o{ customer_signature_group_settings : "configured_in"
     
     signatures {
-        varchar name PK
-        int version PK
+        bigint_unsigned id PK
+        varchar name
         text description
         text content
+        int version
         enum status
         datetime created_at
         datetime updated_at
     }
     
     signature_groups {
-        varchar name PK
+        bigint_unsigned id PK
+        varchar name
         text description
         enum application_status
         int priority
@@ -1430,17 +1438,16 @@ erDiagram
     }
     
     signature_group_members {
-        varchar group_name PK_FK
-        varchar signature_name PK_FK
-        int signature_version PK_FK
+        bigint_unsigned id PK
+        bigint_unsigned group_id FK
+        bigint_unsigned signature_id FK
         int order
         datetime created_at
     }
     
     signature_candidates {
         bigint_unsigned id PK
-        varchar signature_name FK
-        int signature_version FK
+        bigint_unsigned signature_id FK
         varchar name
         text description
         text content
@@ -1454,10 +1461,9 @@ erDiagram
     
     signature_applications {
         bigint_unsigned id PK
-        varchar signature_name FK
-        int signature_version FK
+        bigint_unsigned signature_id FK
         datetime applied_at
-        varchar applied_by_email FK
+        bigint_unsigned applied_by FK
         enum status
     }
 ```
@@ -1473,9 +1479,10 @@ erDiagram
     notification_rules ||--o{ notifications : "triggers"
     
     notification_channels {
-        varchar customer_name PK_FK
-        varchar name PK
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
         enum channel_type
+        varchar name
         json config
         boolean is_active
         datetime created_at
@@ -1483,9 +1490,10 @@ erDiagram
     }
     
     notification_rules {
-        varchar customer_name PK_FK
-        varchar channel_name PK_FK
-        varchar event_type PK
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        bigint_unsigned channel_id FK
+        varchar event_type
         enum priority
         int deduplication_window_minutes
         boolean is_active
@@ -1495,9 +1503,9 @@ erDiagram
     
     notifications {
         bigint_unsigned id PK
-        varchar customer_name FK
-        varchar channel_name FK
-        varchar event_type FK
+        bigint_unsigned customer_id FK
+        bigint_unsigned rule_id FK
+        varchar event_type
         enum priority
         enum status
         int retry_count
@@ -1511,7 +1519,7 @@ erDiagram
 ```mermaid
 erDiagram
     password_policy {
-        varchar policy_name PK
+        bigint_unsigned id PK
         int min_length
         boolean require_uppercase
         boolean require_lowercase
@@ -1525,7 +1533,8 @@ erDiagram
     }
     
     batch_schedules {
-        varchar schedule_type PK
+        bigint_unsigned id PK
+        varchar schedule_type UK
         time schedule_time
         boolean is_enabled
         datetime created_at
@@ -1570,49 +1579,54 @@ erDiagram
     notification_rules ||--o{ notifications : "triggers"
     
     users {
-        varchar email PK
+        bigint_unsigned id PK
+        varchar email UK
         varchar password_hash
         varchar name
-        varchar customer_name FK
+        bigint_unsigned customer_id FK
         boolean mfa_enabled
         boolean is_active
     }
     
     roles {
-        varchar name PK
+        bigint_unsigned id PK
+        varchar name UK
     }
     
     customers {
-        varchar name PK
+        bigint_unsigned id PK
+        varchar name
         boolean is_active
     }
     
     fqdns {
-        varchar fqdn PK
-        varchar customer_name FK
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
     }
     
     signatures {
-        varchar name PK
-        int version PK
+        bigint_unsigned id PK
+        varchar name
         enum status
     }
     
     signature_groups {
-        varchar name PK
+        bigint_unsigned id PK
+        varchar name
         enum application_status
     }
     
     notification_channels {
-        varchar customer_name PK_FK
-        varchar name PK
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
         enum channel_type
     }
     
     notification_rules {
-        varchar customer_name PK_FK
-        varchar channel_name PK_FK
-        varchar event_type PK
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        bigint_unsigned channel_id FK
     }
 ```
 
@@ -1624,10 +1638,11 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| email | VARCHAR(255) | PRIMARY KEY | メールアドレス |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ユーザーID |
+| email | VARCHAR(255) | NOT NULL, UNIQUE | メールアドレス |
 | password_hash | VARCHAR(255) | NOT NULL | パスワードハッシュ |
 | name | VARCHAR(255) | NOT NULL | ユーザー名 |
-| customer_name | VARCHAR(255) | NULL, FOREIGN KEY | 顧客名（顧客ユーザーの場合） |
+| customer_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID（顧客ユーザーの場合） |
 | mfa_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | MFA有効フラグ |
 | mfa_secret | VARCHAR(255) | NULL | MFA秘密鍵（暗号化） |
 | mfa_backup_codes | TEXT | NULL | MFAバックアップコード（暗号化） |
@@ -1638,15 +1653,17 @@ erDiagram
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
 
 **インデックス**:
-- PRIMARY KEY (email)
-- INDEX (customer_name)
+- PRIMARY KEY (id)
+- UNIQUE KEY (email)
+- INDEX (customer_id)
 - INDEX (is_active)
 
 ##### roles（ロール）
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| name | VARCHAR(100) | PRIMARY KEY | ロール名 |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ロールID |
+| name | VARCHAR(100) | NOT NULL, UNIQUE | ロール名 |
 | description | TEXT | NULL | 説明 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
@@ -1661,21 +1678,23 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| user_email | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | ユーザーメールアドレス |
-| role_name | VARCHAR(100) | PRIMARY KEY, FOREIGN KEY | ロール名 |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| user_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | ユーザーID |
+| role_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | ロールID |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 
 **インデックス**:
-- PRIMARY KEY (user_email, role_name)
-- INDEX (user_email)
-- INDEX (role_name)
+- PRIMARY KEY (id)
+- UNIQUE KEY (user_id, role_id)
+- INDEX (user_id)
+- INDEX (role_id)
 
 ##### sessions（セッション）
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | VARCHAR(255) | PRIMARY KEY | セッションID |
-| user_email | VARCHAR(255) | NOT NULL, FOREIGN KEY | ユーザーメールアドレス |
+| user_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | ユーザーID |
 | ip_address | VARCHAR(45) | NULL | IPアドレス |
 | user_agent | VARCHAR(500) | NULL | User-Agent |
 | expires_at | DATETIME | NOT NULL | 有効期限 |
@@ -1683,7 +1702,7 @@ erDiagram
 
 **インデックス**:
 - PRIMARY KEY (id)
-- INDEX (user_email)
+- INDEX (user_id)
 - INDEX (expires_at)
 
 #### 3.2.4.2 顧客・FQDN関連テーブル
@@ -1692,29 +1711,32 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| name | VARCHAR(255) | PRIMARY KEY | 顧客名 |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | 顧客ID |
+| name | VARCHAR(255) | NOT NULL | 顧客名 |
 | contact_email | VARCHAR(255) | NULL | 連絡先メール |
 | is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効フラグ |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
 
 **インデックス**:
-- PRIMARY KEY (name)
+- PRIMARY KEY (id)
 - INDEX (is_active)
 
 ##### fqdns（FQDN）
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| fqdn | VARCHAR(255) | PRIMARY KEY | FQDN |
-| customer_name | VARCHAR(255) | NOT NULL, FOREIGN KEY | 顧客名 |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | FQDN ID |
+| customer_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | 顧客ID |
+| fqdn | VARCHAR(255) | NOT NULL, UNIQUE | FQDN |
 | is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効フラグ |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
 
 **インデックス**:
-- PRIMARY KEY (fqdn)
-- INDEX (customer_name)
+- PRIMARY KEY (id)
+- UNIQUE KEY (fqdn)
+- INDEX (customer_id)
 - INDEX (is_active)
 
 #### 3.2.4.3 シグニチャ関連テーブル
@@ -1723,32 +1745,34 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| name | VARCHAR(255) | PRIMARY KEY | シグニチャ名 |
-| version | INT UNSIGNED | PRIMARY KEY | バージョン |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | シグニチャID |
+| name | VARCHAR(255) | NOT NULL | シグニチャ名 |
 | description | TEXT | NULL | 説明 |
 | content | TEXT | NOT NULL | シグニチャ内容 |
+| version | INT UNSIGNED | NOT NULL, DEFAULT 1 | バージョン |
 | status | ENUM('active', 'inactive', 'deprecated') | NOT NULL, DEFAULT 'active' | ステータス |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
 
 **インデックス**:
-- PRIMARY KEY (name, version)
+- PRIMARY KEY (id)
 - INDEX (status)
 
 ##### signature_groups（シグニチャグループ）
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| name | VARCHAR(255) | PRIMARY KEY | グループ名 |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | グループID |
+| name | VARCHAR(255) | NOT NULL | グループ名 |
 | description | TEXT | NULL | 説明 |
 | application_status | ENUM('applied', 'not_applied', 'customer_decision') | NOT NULL, DEFAULT 'customer_decision' | 適用状態 |
 | priority | INT | NOT NULL, DEFAULT 0 | 優先度 |
-| created_by_email | VARCHAR(255) | NULL, FOREIGN KEY | 作成者ユーザーメールアドレス |
+| created_by | BIGINT UNSIGNED | NULL, FOREIGN KEY | 作成者ユーザーID |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
 
 **インデックス**:
-- PRIMARY KEY (name)
+- PRIMARY KEY (id)
 - INDEX (application_status)
 - INDEX (priority)
 
@@ -1756,24 +1780,24 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| group_name | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | グループ名 |
-| signature_name | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | シグニチャ名 |
-| signature_version | INT UNSIGNED | PRIMARY KEY, FOREIGN KEY | シグニチャバージョン |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| group_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | グループID |
+| signature_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | シグニチャID |
 | order | INT | NOT NULL, DEFAULT 0 | 表示順 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 
 **インデックス**:
-- PRIMARY KEY (group_name, signature_name, signature_version)
-- INDEX (group_name)
-- INDEX (signature_name, signature_version)
+- PRIMARY KEY (id)
+- UNIQUE KEY (group_id, signature_id)
+- INDEX (group_id)
+- INDEX (signature_id)
 
 ##### signature_candidates（シグニチャ候補）
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | 候補ID（履歴テーブルのためIDを維持） |
-| signature_name | VARCHAR(255) | NULL, FOREIGN KEY | シグニチャ名 |
-| signature_version | INT UNSIGNED | NULL, FOREIGN KEY | シグニチャバージョン |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | 候補ID |
+| signature_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | シグニチャID |
 | name | VARCHAR(255) | NOT NULL | シグニチャ名 |
 | description | TEXT | NULL | 説明 |
 | content | TEXT | NOT NULL | シグニチャ内容 |
@@ -1786,7 +1810,6 @@ erDiagram
 
 **インデックス**:
 - PRIMARY KEY (id)
-- INDEX (signature_name, signature_version)
 - INDEX (status)
 - INDEX (last_verified_at)
 
@@ -1794,37 +1817,36 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID（履歴テーブルのためIDを維持） |
-| signature_name | VARCHAR(255) | NOT NULL, FOREIGN KEY | シグニチャ名 |
-| signature_version | INT UNSIGNED | NOT NULL, FOREIGN KEY | シグニチャバージョン |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| signature_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | シグニチャID |
 | applied_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 適用日時 |
-| applied_by_email | VARCHAR(255) | NULL, FOREIGN KEY | 適用者ユーザーメールアドレス |
+| applied_by | BIGINT UNSIGNED | NULL, FOREIGN KEY | 適用者ユーザーID |
 | status | ENUM('active', 'inactive', 'deprecated') | NOT NULL, DEFAULT 'active' | ステータス |
 
 **インデックス**:
 - PRIMARY KEY (id)
-- INDEX (signature_name, signature_version)
+- INDEX (signature_id)
 - INDEX (applied_at)
 
 ##### customer_signature_group_settings（顧客別シグニチャグループ設定）
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| customer_name | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | 顧客名 |
-| fqdn | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | FQDN（NULLの場合は顧客全体設定として扱う） |
-| group_name | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | グループ名 |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| customer_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | 顧客ID |
+| fqdn_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | FQDN ID（NULLの場合は顧客全体） |
+| group_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | グループID |
 | application_status | ENUM('applied', 'not_applied') | NOT NULL | 適用状態 |
-| applied_by_email | VARCHAR(255) | NULL, FOREIGN KEY | 設定者ユーザーメールアドレス |
+| applied_by | BIGINT UNSIGNED | NULL, FOREIGN KEY | 設定者ユーザーID |
 | applied_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 設定日時 |
 | notes | TEXT | NULL | 備考 |
 
 **インデックス**:
-- PRIMARY KEY (customer_name, fqdn, group_name)
-- INDEX (customer_name)
-- INDEX (fqdn)
-- INDEX (group_name)
-
-**注意**: `fqdn`がNULLの場合は顧客全体設定として扱う。MySQLではNULLを含むカラムをPKにできないため、実装時は`fqdn`に空文字列（''）を使用するか、別テーブルに分離することを検討する。
+- PRIMARY KEY (id)
+- UNIQUE KEY (customer_id, fqdn_id, group_id)
+- INDEX (customer_id)
+- INDEX (fqdn_id)
+- INDEX (group_id)
 
 #### 3.2.4.4 設定関連テーブル
 
@@ -1832,7 +1854,7 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| policy_name | VARCHAR(100) | PRIMARY KEY, DEFAULT 'default' | ポリシー名（シングルトンのため固定値） |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
 | min_length | INT | NOT NULL, DEFAULT 8 | 最小文字数 |
 | require_uppercase | BOOLEAN | NOT NULL, DEFAULT FALSE | 大文字必須 |
 | require_lowercase | BOOLEAN | NOT NULL, DEFAULT FALSE | 小文字必須 |
@@ -1848,7 +1870,8 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| schedule_type | VARCHAR(100) | PRIMARY KEY | スケジュールタイプ |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| schedule_type | VARCHAR(100) | NOT NULL, UNIQUE | スケジュールタイプ |
 | schedule_time | TIME | NOT NULL | 実行時間（JST） |
 | is_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効フラグ |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
@@ -1862,11 +1885,11 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID（NULL可カラムが多いためIDをPKとして維持） |
-| user_email | VARCHAR(255) | NULL, FOREIGN KEY | ユーザーメールアドレス |
-| role_name | VARCHAR(100) | NULL, FOREIGN KEY | ロール名 |
-| customer_name | VARCHAR(255) | NULL, FOREIGN KEY | 顧客名 |
-| fqdn | VARCHAR(255) | NULL, FOREIGN KEY | FQDN |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| user_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | ユーザーID |
+| role_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | ロールID |
+| customer_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID |
+| fqdn_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | FQDN ID |
 | ip_address | VARCHAR(45) | NOT NULL | IPアドレス/CIDR |
 | expires_at | DATETIME | NULL | 有効期限 |
 | is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効フラグ |
@@ -1875,14 +1898,11 @@ erDiagram
 
 **インデックス**:
 - PRIMARY KEY (id)
-- UNIQUE KEY (user_email, role_name, customer_name, fqdn, ip_address) WHERE user_email IS NOT NULL AND role_name IS NOT NULL AND customer_name IS NOT NULL AND fqdn IS NOT NULL
-- INDEX (user_email)
-- INDEX (role_name)
-- INDEX (customer_name)
-- INDEX (fqdn)
+- INDEX (user_id)
+- INDEX (role_id)
+- INDEX (customer_id)
+- INDEX (fqdn_id)
 - INDEX (expires_at)
-
-**注意**: NULL可カラムが多いため、本質的な一意キーを構成できないため、IDをPKとして維持。一意性はアプリケーションレベルで保証する。
 
 #### 3.2.4.5 通知関連テーブル
 
@@ -1890,27 +1910,27 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| customer_name | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | 顧客名（NULLの場合はサービス全体設定として扱う） |
-| name | VARCHAR(255) | PRIMARY KEY | チャネル名 |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| customer_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID（NULLの場合はサービス全体） |
 | channel_type | ENUM('email', 'slack', 'webhook') | NOT NULL | チャネルタイプ |
+| name | VARCHAR(255) | NOT NULL | チャネル名 |
 | config | JSON | NOT NULL | 設定（JSON形式） |
 | is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効フラグ |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
 
 **インデックス**:
-- PRIMARY KEY (customer_name, name)
-- INDEX (customer_name)
-
-**注意**: `customer_name`がNULLの場合はサービス全体設定として扱う。MySQLではNULLを含むカラムをPKにできないため、実装時は`customer_name`に空文字列（''）を使用するか、別テーブルに分離することを検討する。
+- PRIMARY KEY (id)
+- INDEX (customer_id)
 
 ##### notification_rules（通知ルール）
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| customer_name | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | 顧客名（NULLの場合はサービス全体設定として扱う） |
-| channel_name | VARCHAR(255) | PRIMARY KEY, FOREIGN KEY | チャネル名 |
-| event_type | VARCHAR(100) | PRIMARY KEY | イベントタイプ |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| customer_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID（NULLの場合はサービス全体） |
+| channel_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | チャネルID |
+| event_type | VARCHAR(100) | NOT NULL | イベントタイプ |
 | priority | ENUM('critical', 'medium', 'low') | NOT NULL | 優先度 |
 | deduplication_window_minutes | INT | NULL | 重複防止期間（分） |
 | is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効フラグ |
@@ -1918,20 +1938,18 @@ erDiagram
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
 
 **インデックス**:
-- PRIMARY KEY (customer_name, channel_name, event_type)
-- INDEX (customer_name)
-- INDEX (channel_name)
+- PRIMARY KEY (id)
+- INDEX (customer_id)
+- INDEX (channel_id)
 - INDEX (event_type)
-
-**注意**: `customer_name`がNULLの場合はサービス全体設定として扱う。MySQLではNULLを含むカラムをPKにできないため、実装時は`customer_name`に空文字列（''）を使用するか、別テーブルに分離することを検討する。
 
 ##### notifications（通知履歴）
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID（履歴テーブルのためIDを維持） |
-| customer_name | VARCHAR(255) | NULL, FOREIGN KEY | 顧客名 |
-| channel_name | VARCHAR(255) | NULL, FOREIGN KEY | チャネル名 |
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| customer_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID |
+| rule_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | ルールID |
 | event_type | VARCHAR(100) | NOT NULL | イベントタイプ |
 | priority | ENUM('critical', 'medium', 'low') | NOT NULL | 優先度 |
 | status | ENUM('pending', 'sent', 'failed') | NOT NULL, DEFAULT 'pending' | ステータス |
@@ -1941,7 +1959,8 @@ erDiagram
 
 **インデックス**:
 - PRIMARY KEY (id)
-- INDEX (customer_name, channel_name, event_type)
+- INDEX (customer_id)
+- INDEX (rule_id)
 - INDEX (status)
 - INDEX (created_at)
 
@@ -1955,22 +1974,15 @@ erDiagram
 
 #### 3.2.6.1 基本方針
 
-- **主キー**: テーブルレコードを一意にする本質的なカラムを主キーに設定（自然キー）
-  - 単一カラムが一意な場合: そのカラムをPK
-  - 複合キーが必要な場合: 複合PKを使用
-  - 履歴テーブルなど本質的な一意キーがない場合のみ: AUTO_INCREMENTのIDをPK
+- **主キー**: すべてのテーブルにAUTO_INCREMENTの主キーを設定
 - **外部キー**: 外部キーカラムにインデックスを設定
 - **検索条件**: WHERE句で頻繁に使用されるカラムにインデックスを設定
 - **結合**: JOINで使用されるカラムにインデックスを設定
 
 #### 3.2.6.2 複合インデックス
 
-- `user_roles(user_email, role_name)`: 複合PK
-- `customer_signature_group_settings(customer_name, fqdn, group_name)`: 複合PK
-- `signatures(name, version)`: 複合PK
-- `signature_group_members(group_name, signature_name, signature_version)`: 複合PK
-- `notification_channels(customer_name, name)`: 複合PK
-- `notification_rules(customer_name, channel_name, event_type)`: 複合PK
+- `user_roles(user_id, role_id)`: ユニーク制約と検索の両方に対応
+- `customer_signature_group_settings(customer_id, fqdn_id, group_id)`: ユニーク制約
 
 ### 3.2.7 データベースマイグレーション設計（Flyway）
 
