@@ -2513,7 +2513,106 @@ src/main/resources/db/
 3. **接続プール**: デフォルト5本、最大接続数100（DECISION_POINTS.mdと統一、負荷試験に基づいて段階的に調整可能）
 4. **トランザクション**: 必要に応じて明示的にトランザクションを開始
 
-### 3.2.10 注意事項
+### 3.2.10 データベース初期化スクリプト
+
+#### 3.2.10.1 概要
+
+開発環境やCI環境でデータベースを簡単に初期化できるように、データベース初期化スクリプトを提供します。
+
+#### 3.2.10.2 スクリプトの配置
+
+**配置場所**:
+```
+scripts/database/
+```
+
+**ファイル構成**:
+```
+scripts/database/
+└── init-database.sh    # データベース初期化スクリプト
+```
+
+#### 3.2.10.3 スクリプトの機能
+
+**init-database.sh**:
+- MySQL 8.4系のデータベース作成
+- utf8mb4文字コード設定（データベース、テーブル、カラムすべて）
+- Flywayマイグレーション実行
+- 初期データ投入（オプション）
+
+#### 3.2.10.4 使用方法
+
+**基本的な使用方法**:
+```bash
+# 基本的な初期化（初期データ投入なし）
+./scripts/database/init-database.sh \
+  -h localhost \
+  -P 3306 \
+  -u root \
+  -p password \
+  -d mrwebdefence
+
+# 初期データ投入を含む初期化
+./scripts/database/init-database.sh \
+  -h localhost \
+  -P 3306 \
+  -u root \
+  -p password \
+  -d mrwebdefence \
+  --seed
+```
+
+**環境変数を使用する場合**:
+```bash
+export DB_HOST=localhost
+export DB_PORT=3306
+export DB_USER=root
+export DB_PASSWORD=password
+export DB_NAME=mrwebdefence
+export INCLUDE_SEED=true
+
+./scripts/database/init-database.sh
+```
+
+**オプション**:
+- `-h, --host HOST`: データベースホスト（デフォルト: localhost）
+- `-P, --port PORT`: データベースポート（デフォルト: 3306）
+- `-u, --user USER`: データベースユーザー（デフォルト: root）
+- `-p, --password PASSWORD`: データベースパスワード（必須）
+- `-d, --database NAME`: データベース名（デフォルト: mrwebdefence）
+- `-s, --seed`: 初期データ投入を含める
+- `--help`: ヘルプメッセージを表示
+
+#### 3.2.10.5 スクリプトの動作
+
+1. **MySQL接続確認**
+   - 指定されたホスト、ポート、ユーザー、パスワードでMySQLに接続できるか確認
+
+2. **データベース作成**
+   - 指定されたデータベース名でデータベースを作成
+   - 文字セット: utf8mb4
+   - 照合順序: utf8mb4_unicode_ci
+
+3. **utf8mb4文字コード設定確認**
+   - データベースの文字セットと照合順序がutf8mb4であることを確認
+
+4. **Flywayマイグレーション実行**
+   - 通常のマイグレーション: `locations=classpath:db/migration`
+   - 初期データ投入を含む: `locations=classpath:db/migration,classpath:db/seed`
+
+#### 3.2.10.6 前提条件
+
+- MySQL 8.4系がインストールされていること
+- Flyway CLIがインストールされていること、またはMaven/Gradleプラグインが使用可能であること
+- データベースユーザーにデータベース作成権限があること
+
+#### 3.2.10.7 注意事項
+
+- 本番環境での使用は推奨しません（開発環境・CI環境向け）
+- データベースパスワードは環境変数で指定することを推奨（コマンドライン引数に含めると履歴に残る可能性がある）
+- Flyway CLIがインストールされていない場合、Maven/Gradleプラグインを使用してください
+
+### 3.2.11 注意事項
 
 - 外部キー制約はデータ整合性を保つが、パフォーマンスに影響する可能性がある
 - 大量データが想定されるテーブル（ログ関連）は将来パーティショニングを検討
