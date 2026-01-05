@@ -2448,16 +2448,19 @@ src/main/resources/db/
 
 **ファイル構成例**:
 ```
-src/main/resources/db/migration/
-├── V1__create_users_table.sql
-├── V2__create_roles_table.sql
-└── ...
-
-src/main/resources/db/migration/seed/
-├── R__insert_initial_roles.sql
-├── R__insert_initial_password_policy.sql
-├── R__insert_initial_batch_schedules.sql
-└── ...
+src/main/resources/db/
+├── migration/
+│   ├── V1__create_users_table.sql
+│   ├── V2__create_roles_table.sql
+│   ├── V3__create_user_roles_table.sql
+│   ├── V4__add_customer_id_to_users.sql
+│   ├── V5__create_index_on_fqdns.sql
+│   └── ...
+└── seed/
+    ├── R__insert_initial_roles.sql
+    ├── R__insert_initial_password_policy.sql
+    ├── R__insert_initial_batch_schedules.sql
+    └── ...
 ```
 
 **運用方法**:
