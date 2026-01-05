@@ -1370,10 +1370,11 @@ erDiagram
 ```mermaid
 erDiagram
     customers ||--o{ fqdns : "has"
-    customers ||--o{ customer_signature_group_settings : "has"
     customers ||--o{ users : "has"
     fqdns ||--o{ customer_signature_group_settings : "applies_to"
     signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    fqdns ||--o{ fqdn_signature_applications : "has"
+    signatures ||--o{ fqdn_signature_applications : "applied_to"
     
     customers {
         bigint_unsigned id PK
@@ -1395,13 +1396,22 @@ erDiagram
     
     customer_signature_group_settings {
         bigint_unsigned id PK
-        bigint_unsigned customer_id FK
         bigint_unsigned fqdn_id FK
         bigint_unsigned group_id FK
         enum application_status
         bigint_unsigned applied_by FK
         datetime applied_at
         text notes
+    }
+    
+    fqdn_signature_applications {
+        bigint_unsigned id PK
+        bigint_unsigned fqdn_id FK
+        bigint_unsigned signature_id FK
+        int order
+        boolean is_enabled
+        datetime created_at
+        datetime updated_at
     }
 ```
 
@@ -1567,9 +1577,10 @@ erDiagram
     users ||--o{ signature_applications : "applies"
     
     %% 顧客別シグニチャグループ設定
-    customers ||--o{ customer_signature_group_settings : "has"
     fqdns ||--o{ customer_signature_group_settings : "applies_to"
     signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    fqdns ||--o{ fqdn_signature_applications : "has"
+    signatures ||--o{ fqdn_signature_applications : "applied_to"
     
     %% 通知関連
     customers ||--o{ notification_channels : "has"
@@ -1833,8 +1844,7 @@ erDiagram
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
-| customer_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | 顧客ID |
-| fqdn_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | FQDN ID（NULLの場合は顧客全体） |
+| fqdn_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | FQDN ID |
 | group_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | グループID |
 | application_status | ENUM('applied', 'not_applied') | NOT NULL | 適用状態 |
 | applied_by | BIGINT UNSIGNED | NULL, FOREIGN KEY | 設定者ユーザーID |
@@ -1843,10 +1853,33 @@ erDiagram
 
 **インデックス**:
 - PRIMARY KEY (id)
-- UNIQUE KEY (customer_id, fqdn_id, group_id)
-- INDEX (customer_id)
+- UNIQUE KEY (fqdn_id, group_id)
 - INDEX (fqdn_id)
 - INDEX (group_id)
+
+**説明**: FQDNに対してシグニチャグループを適用するかどうかを管理するテーブル。シグニチャの順序は管理しない。
+
+##### fqdn_signature_applications（FQDN別シグニチャ適用順序）
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| fqdn_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | FQDN ID |
+| signature_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | シグニチャID |
+| order | INT | NOT NULL | 適用順序（小さい値が先に適用） |
+| is_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効フラグ |
+| created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 作成日時 |
+| updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時 |
+
+**インデックス**:
+- PRIMARY KEY (id)
+- UNIQUE KEY (fqdn_id, signature_id)
+- INDEX (fqdn_id)
+- INDEX (fqdn_id, order)
+- INDEX (signature_id)
+- INDEX (is_enabled)
+
+**説明**: FQDNに対して適用されるシグニチャの順序と有効/無効を管理するテーブル。`order`カラムで適用順序を定義し、`is_enabled`で有効/無効を制御する。
 
 #### 3.2.4.4 設定関連テーブル
 
@@ -1982,7 +2015,9 @@ erDiagram
 #### 3.2.6.2 複合インデックス
 
 - `user_roles(user_id, role_id)`: ユニーク制約と検索の両方に対応
-- `customer_signature_group_settings(customer_id, fqdn_id, group_id)`: ユニーク制約
+- `customer_signature_group_settings(fqdn_id, group_id)`: ユニーク制約
+- `fqdn_signature_applications(fqdn_id, signature_id)`: ユニーク制約
+- `fqdn_signature_applications(fqdn_id, order)`: 順序での検索を最適化
 
 ### 3.2.7 データベースマイグレーション設計（Flyway）
 
