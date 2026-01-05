@@ -2668,16 +2668,17 @@ DB関連リソースのリポジトリ管理方針を段階的に実装します
 **実装内容**:
 1. **MrWebDefence-Designでのリソース管理**
    - ✅ データベース初期化スクリプト（`scripts/database/init-database.sh`）の実装完了
-   - Flywayマイグレーションファイルの配置場所を決定
-   - リソース管理用ディレクトリ構造の確立
+   - ✅ Flywayマイグレーションファイルの配置場所を決定（`db-resources/migration/`、`db-resources/seed/`）
+   - ✅ リソース管理用ディレクトリ構造の確立（`db-resources/`）
 
 2. **配信方法の選定**
-   - 初期は**手動コピー**で開始
-   - 配信先リポジトリ（MrWebDefence-Console）での動作確認
+   - ✅ 初期は**手動コピー**で開始
+   - ✅ 配信スクリプト（`scripts/database/distribute-resources.sh`）の実装
+   - 配信先リポジトリ（MrWebDefence-Console）での動作確認（実装後）
 
 3. **ドキュメント整備**
-   - 配信手順のドキュメント化
-   - リソース管理方針の明確化（本セクション）
+   - ✅ 配信手順のドキュメント化（`docs/DB_RESOURCES_DISTRIBUTION.md`）
+   - ✅ リソース管理方針の明確化（本セクション、`db-resources/README.md`）
 
 **成果物**:
 - データベース初期化スクリプト
