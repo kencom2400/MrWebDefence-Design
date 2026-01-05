@@ -113,7 +113,7 @@ log_error() {
 # MySQL接続確認
 check_mysql_connection() {
     log_info "MySQL接続を確認中..."
-    if ! mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -p"${DB_PASSWORD}" -e "SELECT 1;" > /dev/null 2>&1; then
+    if ! mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -e "SELECT 1;" > /dev/null 2>&1; then
         log_error "MySQLへの接続に失敗しました"
         exit 1
     fi
@@ -123,7 +123,7 @@ check_mysql_connection() {
 # データベース作成
 create_database() {
     log_info "データベース '${DB_NAME}' を作成中..."
-    mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -p"${DB_PASSWORD}" <<EOF
+    mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" <<EOF
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
@@ -134,8 +134,9 @@ EOF
 # utf8mb4文字コード設定確認
 check_utf8mb4_config() {
     log_info "utf8mb4文字コード設定を確認中..."
-    local charset=$(mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" -N -e "SELECT @@character_set_database;")
-    local collation=$(mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" -N -e "SELECT @@collation_database;")
+    local charset
+    local collation
+    read -r charset collation <<< "$(mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" "${DB_NAME}" -N -e "SELECT @@character_set_database, @@collation_database;")"
     
     if [ "${charset}" != "utf8mb4" ]; then
         log_error "データベースの文字セットがutf8mb4ではありません: ${charset}"
@@ -168,26 +169,25 @@ run_flyway_migration() {
         flyway migrate \
             -url="jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true" \
             -user="${DB_USER}" \
-            -password="${DB_PASSWORD}" \
             -locations="${locations}"
         log_info "Flywayマイグレーション実行完了"
     else
         log_error "Flyway CLIが見つかりません。Flyway CLIをインストールするか、Maven/Gradleプラグインを使用してください。"
         log_info "Mavenを使用する場合の例:"
-        log_info "  mvn flyway:migrate -Dflyway.url=jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME} -Dflyway.user=${DB_USER} -Dflyway.password=${DB_PASSWORD} -Dflyway.locations=${locations}"
+        log_info "  mvn flyway:migrate -Dflyway.url=jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME} -Dflyway.user=${DB_USER} -Dflyway.locations=${locations}"
         exit 1
     fi
 }
 
 # メイン処理
 main() {
+    parse_args "$@"
+    
     log_info "データベース初期化を開始します"
     log_info "データベース: ${DB_NAME}"
     log_info "ホスト: ${DB_HOST}:${DB_PORT}"
     log_info "ユーザー: ${DB_USER}"
     log_info "初期データ投入: ${INCLUDE_SEED}"
-    
-    parse_args "$@"
     
     # 必須パラメータチェック
     if [ -z "${DB_PASSWORD}" ]; then
@@ -195,6 +195,10 @@ main() {
         log_info "環境変数 DB_PASSWORD を設定するか、-p オプションで指定してください"
         exit 1
     fi
+    
+    # mysqlとflywayコマンドにパスワードを安全に渡すために環境変数にエクスポートします
+    export MYSQL_PWD="${DB_PASSWORD}"
+    export FLYWAY_PASSWORD="${DB_PASSWORD}"
     
     check_mysql_connection
     create_database
