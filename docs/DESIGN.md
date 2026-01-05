@@ -1589,8 +1589,6 @@ erDiagram
     signatures ||--o{ fqdn_signature_applications : "applied_to"
     signature_groups ||--o{ fqdn_signature_applications : "originated_from"
     signature_group_members ||--o{ fqdn_signature_applications : "based_on"
-    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
-    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
     
     %% 通知関連
     customers ||--o{ notification_channels : "has"
@@ -1854,7 +1852,7 @@ erDiagram
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
-| fqdn_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | FQDN ID |
+| fqdn_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | FQDN ID（NULLの場合は顧客全体） |
 | group_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | グループID |
 | application_status | ENUM('applied', 'not_applied') | NOT NULL | 適用状態 |
 | applied_by | BIGINT UNSIGNED | NULL, FOREIGN KEY | 設定者ユーザーID |
@@ -1867,7 +1865,7 @@ erDiagram
 - INDEX (fqdn_id)
 - INDEX (group_id)
 
-**説明**: FQDNに対してシグニチャグループを適用するかどうかを管理するテーブル。シグニチャの順序は管理しない。
+**説明**: FQDNに対してシグニチャグループを適用するかどうかを管理するテーブル。シグニチャの順序は管理しない。`fqdn_id`がNULLの場合は、その顧客全体に対してシグニチャグループを適用する設定となる。
 
 ##### fqdn_signature_applications（FQDN別シグニチャ適用順序）
 
@@ -1885,7 +1883,7 @@ erDiagram
 
 **インデックス**:
 - PRIMARY KEY (id)
-- UNIQUE KEY (fqdn_id, signature_id, group_id, group_member_id)
+- UNIQUE KEY (fqdn_id, group_member_id)
 - INDEX (fqdn_id)
 - INDEX (fqdn_id, order)
 - INDEX (signature_id)
@@ -1894,6 +1892,8 @@ erDiagram
 - INDEX (is_enabled)
 
 **説明**: FQDNに対して適用されるシグニチャの順序と有効/無効を管理するテーブル。`order`カラムで適用順序を定義し、`is_enabled`で有効/無効を制御する。`group_id`と`group_member_id`により、どのシグニチャグループのどのメンバーに起因しているかを判別できる。これにより、グループの削除・変更時に影響を受けるレコードを特定し、変更を伝搬できる。
+
+**注意**: `group_member_id`は`signature_group_members`テーブルの主キーであり、既に`group_id`と`signature_id`を一意に特定するため、ユニークキーは`(fqdn_id, group_member_id)`で十分です。
 
 #### 3.2.4.4 設定関連テーブル
 
@@ -2036,7 +2036,7 @@ erDiagram
 
 - `user_roles(user_id, role_id)`: ユニーク制約と検索の両方に対応
 - `customer_signature_group_settings(fqdn_id, group_id)`: ユニーク制約
-- `fqdn_signature_applications(fqdn_id, signature_id, group_id, group_member_id)`: ユニーク制約
+- `fqdn_signature_applications(fqdn_id, group_member_id)`: ユニーク制約
 - `fqdn_signature_applications(fqdn_id, order)`: 順序での検索を最適化
 
 ### 3.2.7 データベースマイグレーション設計（Flyway）
