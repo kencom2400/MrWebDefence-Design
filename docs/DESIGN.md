@@ -2136,8 +2136,8 @@ erDiagram
 **ip_allowlist**
 - `user_id` → `users.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
   - ユーザーが削除された場合、関連するAllowListエントリも削除
-- `role_id` → `roles.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
-  - ロールが削除された場合、関連するAllowListエントリも削除
+- `role_id` → `roles.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - ロールが使用されている場合は削除不可（ロールはマスターデータのため、意図しない設定削除を防ぐ）
 - `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
   - 顧客が削除された場合、関連するAllowListエントリも削除
 - `fqdn_id` → `fqdns.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
