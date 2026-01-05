@@ -165,8 +165,6 @@ start_task_by_key() {
   git pull origin main > /dev/null 2>&1 || true
   
   # ブランチ名を生成（kebab-case）
-  # Issueキー（例：MWD-123）から番号部分を抽出
-  ISSUE_NUM=$(echo "$ISSUE_KEY" | sed 's/.*-//')
   # 英数字以外の文字はすべてハイフンに置き換え、先頭と末尾のハイフンを削除
   BRANCH_NAME="feature/${ISSUE_KEY}-$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-+|-+$//g' | cut -c1-60)"
   
