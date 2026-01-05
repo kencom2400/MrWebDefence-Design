@@ -10996,3 +10996,108 @@ extend-ignore = ["E203", "E266", "W503"]
 **参照**: PR #60 - Issue #23: CI/CDパイプラインの構築（Gemini Code Assistレビュー指摘 - 第2回）
 
 ---
+
+## データベース設計・ER図レビュー観点
+
+### ER図の完全性チェック
+
+**❌ 悪い例**: ER図に外部キー関係が表現されていない
+
+```mermaid
+erDiagram
+    users ||--o{ customer_signature_group_settings : "applies_to"
+    signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    # applied_byとusersテーブルの関連が欠落
+```
+
+**問題点**:
+- テーブル定義に外部キーがあるのに、ER図に表現されていない
+- 設計の整合性が損なわれる
+- 実装時に混乱を招く可能性がある
+
+**✅ 良い例**: すべての外部キー関係をER図に表現する
+
+```mermaid
+erDiagram
+    users ||--o{ customer_signature_group_settings : "applied_by"
+    fqdns ||--o{ customer_signature_group_settings : "applies_to"
+    signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+```
+
+**理由**:
+- 設計の整合性が保たれる
+- ER図の自己完結性が高まる
+- 実装時の混乱を防ぐことができる
+
+### 複数外部キーの論理の明確化
+
+**❌ 悪い例**: 複数のNULL許容外部キーの論理が不明確
+
+```markdown
+| user_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | ユーザーID |
+| role_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | ロールID |
+| customer_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID |
+| fqdn_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | 顧客ID |
+```
+
+**問題点**:
+- 複数のキーが設定された場合の論理（AND/OR条件）が不明確
+- 実装時の混乱を招く可能性がある
+- テストケースの作成が困難
+
+**✅ 良い例**: 複数外部キーの論理を明確に説明する
+
+```markdown
+**注意**: `user_id`、`role_id`、`customer_id`、`fqdn_id`はすべてNULL許容です。これらのキーが複数設定された場合の論理は以下の通りです：
+- **優先順位**: より具体的な条件が優先されます（user_id > role_id > customer_id > fqdn_id）
+- **マッチング条件**: 設定されているすべてのキーが一致する場合にのみ、AllowListエントリが適用されます（AND条件）
+- **例**: `user_id=1`と`customer_id=2`が両方設定されている場合、ユーザーIDが1かつ顧客IDが2の場合のみ適用されます
+- **実装時の注意**: アプリケーションレベルで適切なマッチングロジックを実装する必要があります
+```
+
+**理由**:
+- 実装時の混乱を防ぐことができる
+- テストケースの作成が容易になる
+- ドキュメントの完成度が向上する
+
+### ER図の自己完結性
+
+**❌ 悪い例**: 部分ER図に関係が欠落している
+
+```mermaid
+erDiagram
+    fqdns ||--o{ fqdn_signature_applications : "has"
+    signatures ||--o{ fqdn_signature_applications : "applied_to"
+    # signature_groups、signature_group_membersとの関連が欠落
+```
+
+**問題点**:
+- 部分ER図に関係が欠落している
+- 全体ER図と部分ER図の整合性が損なわれる
+- 理解が困難になる
+
+**✅ 良い例**: すべてのER図に関係を完全に表現する
+
+```mermaid
+erDiagram
+    fqdns ||--o{ fqdn_signature_applications : "has"
+    signatures ||--o{ fqdn_signature_applications : "applied_to"
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
+```
+
+**理由**:
+- ER図の自己完結性が高まる
+- 部分ER図だけでも理解できる
+- 全体ER図との整合性が保たれる
+
+### 実装チェックリスト
+
+- [ ] ER図にすべての外部キー関係が表現されているか確認
+- [ ] 複数のNULL許容外部キーがある場合、その論理（AND/OR条件、優先順位）を明確に説明する
+- [ ] 部分ER図と全体ER図の整合性を確認
+- [ ] テーブル定義書とER図の整合性を確認
+
+**参照**: PR #37 - Issue MWD-77: Task 2.1: ER図作成（Gemini Code Assistレビュー指摘）
+
+---
