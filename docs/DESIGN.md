@@ -2417,6 +2417,84 @@ src/main/resources/db/migration/
 - ファイル名は命名規則に従う
 - ファイルの文字コードはUTF-8（BOMなし）を使用
 
+#### 3.2.8.7 初期データ投入（Repeatable Migrations）
+
+**概要**:
+初期データ投入は、FlywayのRepeatable Migrations機能を使用して実装します。Repeatable Migrationsは、バージョン番号の代わりに`R`プレフィックスを使用し、チェックサムが変更された場合に再実行される仕組みです。
+
+**命名規則**:
+```
+R{description}.sql
+```
+
+**命名例**:
+- `R__insert_initial_roles.sql`
+- `R__insert_initial_password_policy.sql`
+- `R__insert_initial_batch_schedules.sql`
+
+**配置場所**:
+初期データ投入用SQLは、通常のマイグレーションディレクトリとは別のディレクトリに配置します。
+
+```
+src/main/resources/db/migration/          # 通常のマイグレーション
+src/main/resources/db/migration/seed/     # 初期データ投入用（Repeatable Migrations）
+```
+
+**ファイル構成例**:
+```
+src/main/resources/db/migration/
+├── V1__create_users_table.sql
+├── V2__create_roles_table.sql
+└── ...
+
+src/main/resources/db/migration/seed/
+├── R__insert_initial_roles.sql
+├── R__insert_initial_password_policy.sql
+├── R__insert_initial_batch_schedules.sql
+└── ...
+```
+
+**運用方法**:
+1. **初期データ投入用SQLの作成**
+   - Repeatable Migrations形式で初期データ投入用SQLを作成
+   - `src/main/resources/db/migration/seed/`ディレクトリに配置
+   - 通常のマイグレーションディレクトリには配置しない
+
+2. **初期データ投入の実行タイミング**
+   - **開発環境**: 必要に応じて手動で実行
+   - **テスト環境**: データベース初期化時に実行
+   - **本番環境**: 初回セットアップ時のみ実行
+
+3. **Flyway設定での制御**
+   - 通常のマイグレーション実行時: `locations=db/migration`（seedディレクトリは除外）
+   - 初期データ投入実行時: `locations=db/migration,db/migration/seed`（seedディレクトリを含める）
+
+4. **実行方法の例**:
+   ```bash
+   # 通常のマイグレーション実行（初期データ投入なし）
+   flyway migrate -locations=filesystem:src/main/resources/db/migration
+   
+   # 初期データ投入を含むマイグレーション実行
+   flyway migrate -locations=filesystem:src/main/resources/db/migration,filesystem:src/main/resources/db/migration/seed
+   ```
+
+**Repeatable Migrationsの特徴**:
+- バージョン番号を持たない（`R`プレフィックスを使用）
+- チェックサムが変更された場合に再実行される
+- 実行順序は、バージョン付きマイグレーションの後に実行される
+- 複数のRepeatable Migrationsがある場合、ファイル名の辞書順で実行される
+
+**初期データ投入の注意事項**:
+- 初期データ投入用SQLは、既存データを上書きしないように`INSERT IGNORE`や`ON DUPLICATE KEY UPDATE`を使用する
+- マスターデータ（ロール、パスワードポリシー等）の初期データは、Repeatable Migrationsで管理する
+- テストデータは、Repeatable Migrationsではなく、別の仕組み（テスト用スクリプト等）で管理する
+- 本番環境での初期データ投入は、初回セットアップ時のみ実行し、その後は手動で実行しない
+
+**初期データ投入対象の例**:
+- **rolesテーブル**: サービス管理者、サービス管理メンバー、顧客管理者、顧客メンバー
+- **password_policyテーブル**: デフォルトのパスワードポリシー設定
+- **batch_schedulesテーブル**: デフォルトのバッチスケジュール設定
+
 ### 3.2.9 実装方針
 
 1. **文字コード**: utf8mb4を使用（データベース、テーブル、カラムすべて）
