@@ -1373,8 +1373,11 @@ erDiagram
     customers ||--o{ users : "has"
     fqdns ||--o{ customer_signature_group_settings : "applies_to"
     signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    users ||--o{ customer_signature_group_settings : "applied_by"
     fqdns ||--o{ fqdn_signature_applications : "has"
     signatures ||--o{ fqdn_signature_applications : "applied_to"
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
     
     customers {
         bigint_unsigned id PK
@@ -1581,8 +1584,11 @@ erDiagram
     %% 顧客別シグニチャグループ設定
     fqdns ||--o{ customer_signature_group_settings : "applies_to"
     signature_groups ||--o{ customer_signature_group_settings : "configured_in"
+    users ||--o{ customer_signature_group_settings : "applied_by"
     fqdns ||--o{ fqdn_signature_applications : "has"
     signatures ||--o{ fqdn_signature_applications : "applied_to"
+    signature_groups ||--o{ fqdn_signature_applications : "originated_from"
+    signature_group_members ||--o{ fqdn_signature_applications : "based_on"
     signature_groups ||--o{ fqdn_signature_applications : "originated_from"
     signature_group_members ||--o{ fqdn_signature_applications : "based_on"
     
@@ -1944,6 +1950,12 @@ erDiagram
 - INDEX (customer_id)
 - INDEX (fqdn_id)
 - INDEX (expires_at)
+
+**注意**: `user_id`、`role_id`、`customer_id`、`fqdn_id`はすべてNULL許容です。これらのキーが複数設定された場合の論理は以下の通りです：
+- **優先順位**: より具体的な条件が優先されます（user_id > role_id > customer_id > fqdn_id）
+- **マッチング条件**: 設定されているすべてのキーが一致する場合にのみ、AllowListエントリが適用されます（AND条件）
+- **例**: `user_id=1`と`customer_id=2`が両方設定されている場合、ユーザーIDが1かつ顧客IDが2の場合のみ適用されます
+- **実装時の注意**: アプリケーションレベルで適切なマッチングロジックを実装する必要があります
 
 #### 3.2.4.5 通知関連テーブル
 
