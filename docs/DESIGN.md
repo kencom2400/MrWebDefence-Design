@@ -2107,13 +2107,115 @@ erDiagram
 - INDEX (status)
 - INDEX (created_at)
 
-### 3.2.5 データベース正規化設計
+### 3.2.5 外部キー制約の詳細定義
+
+#### 3.2.5.1 外部キー制約の方針
+
+- **参照整合性**: すべての外部キーに参照整合性制約を設定
+- **削除時の動作**: テーブル間の関係性に応じて適切な動作を設定
+- **更新時の動作**: 主キーの更新は通常発生しないため、RESTRICTを基本とする
+
+#### 3.2.5.2 外部キー制約の定義
+
+##### ユーザー関連テーブル
+
+**users**
+- `customer_id` → `customers.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - 顧客が削除された場合、ユーザーのcustomer_idをNULLに設定（サービス管理者ユーザーとして残す）
+
+**user_roles**
+- `user_id` → `users.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、関連するロール割り当ても削除
+- `role_id` → `roles.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - ロールが使用されている場合は削除不可
+
+**sessions**
+- `user_id` → `users.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、関連するセッションも削除
+
+**ip_allowlist**
+- `user_id` → `users.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、関連するAllowListエントリも削除
+- `role_id` → `roles.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - ロールが削除された場合、関連するAllowListエントリも削除
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連するAllowListエントリも削除
+- `fqdn_id` → `fqdns.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - FQDNが削除された場合、関連するAllowListエントリも削除
+
+##### 顧客・FQDN関連テーブル
+
+**fqdns**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連するFQDNも削除
+
+**customer_signature_group_settings**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連する設定も削除
+- `fqdn_id` → `fqdns.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - FQDNが削除された場合、関連する設定も削除
+- `group_id` → `signature_groups.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - シグニチャグループが削除された場合、関連する設定も削除
+- `applied_by` → `users.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、applied_byをNULLに設定
+
+**fqdn_signature_applications**
+- `fqdn_id` → `fqdns.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - FQDNが削除された場合、関連する適用設定も削除
+- `signature_id` → `signatures.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - シグニチャが使用されている場合は削除不可（論理削除を推奨）
+- `group_id` → `signature_groups.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - シグニチャグループが削除された場合、関連する適用設定も削除
+- `group_member_id` → `signature_group_members.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - シグニチャグループメンバーが削除された場合、関連する適用設定も削除
+
+##### シグニチャ関連テーブル
+
+**signature_groups**
+- `created_by` → `users.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、created_byをNULLに設定
+
+**signature_group_members**
+- `group_id` → `signature_groups.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - シグニチャグループが削除された場合、関連するメンバーも削除
+- `signature_id` → `signatures.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - シグニチャが使用されている場合は削除不可（論理削除を推奨）
+
+**signature_candidates**
+- `signature_id` → `signatures.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - シグニチャが削除された場合、signature_idをNULLに設定（候補として残す）
+
+**signature_applications**
+- `signature_id` → `signatures.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - シグニチャが使用されている場合は削除不可（履歴として保持）
+- `applied_by` → `users.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、applied_byをNULLに設定
+
+##### 通知関連テーブル
+
+**notification_channels**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連する通知チャネルも削除
+
+**notification_rules**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連する通知ルールも削除
+- `channel_id` → `notification_channels.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 通知チャネルが削除された場合、関連する通知ルールも削除
+
+**notifications**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連する通知履歴も削除
+- `rule_id` → `notification_rules.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - 通知ルールが使用されている場合は削除不可（履歴として保持）
+
+### 3.2.6 データベース正規化設計
 
 - **第1正規形**: すべてのテーブルで原子性を確保
 - **第2正規形**: 部分関数従属を排除（user_roles等で実現）
 - **第3正規形**: 推移的関数従属を排除
 
-### 3.2.6 インデックス戦略
+### 3.2.7 インデックス戦略
 
 #### 3.2.6.1 基本方針
 
