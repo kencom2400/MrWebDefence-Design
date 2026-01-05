@@ -11194,4 +11194,90 @@ erDiagram
 
 **参照**: PR #37 - Issue MWD-77: Task 2.1: ER図作成（Gemini Code Assistレビュー指摘 - 第2回）
 
+### 意図的な非正規化のドキュメント化
+
+**❌ 悪い例**: 冗長なカラムの存在理由が不明確
+
+```sql
+-- signature_idとgroup_idはgroup_member_idから取得可能だが、なぜ保持しているのか不明
+CREATE TABLE fqdn_signature_applications (
+    fqdn_id BIGINT UNSIGNED NOT NULL,
+    signature_id BIGINT UNSIGNED NOT NULL,
+    group_id BIGINT UNSIGNED NOT NULL,
+    group_member_id BIGINT UNSIGNED NOT NULL,
+    ...
+);
+```
+
+**問題点**:
+- 冗長なカラムの存在理由が不明確
+- データ不整合のリスクがあることを認識していない可能性がある
+- 実装時に整合性維持の方法が不明確
+
+**✅ 良い例**: 意図的な非正規化であることを明記し、整合性維持方法を記載する
+
+```markdown
+**注意事項**:
+- `signature_id`と`group_id`カラムは、`group_member_id`から取得可能であるため、理論的には冗長です。しかし、パフォーマンス向上のための意図的な非正規化として保持しています。
+- **データ整合性の維持**: `signature_id`と`group_id`は`group_member_id`と整合性が保たれている必要があります。データ不整合を防ぐため、以下のいずれかの方法で整合性を維持する必要があります：
+  - **アプリケーションロジック**: レコード作成・更新時に、`group_member_id`から`signature_id`と`group_id`を取得して設定する
+  - **データベーストリガー**: INSERT/UPDATE時に自動的に`signature_id`と`group_id`を設定するトリガーを実装する
+  - **定期的な整合性チェック**: バッチ処理などで定期的に整合性をチェックし、不整合があれば修正する
+- 実装時には、上記の整合性維持方法のいずれかを選択し、ドキュメント化してください。
+```
+
+**理由**:
+- 設計意図が明確になる
+- データ不整合のリスクを認識できる
+- 実装時の整合性維持方法が明確になる
+
+### 設計変更時の機能要件の再確認
+
+**❌ 悪い例**: 設計変更時に既存の機能要件を見落とす
+
+```sql
+-- 以前: customer_idとfqdn_idの両方があった
+CREATE TABLE customer_signature_group_settings (
+    customer_id BIGINT UNSIGNED NOT NULL,
+    fqdn_id BIGINT UNSIGNED NULL,  -- NULLの場合は顧客全体
+    ...
+);
+
+-- 変更後: customer_idを削除してしまった
+CREATE TABLE customer_signature_group_settings (
+    fqdn_id BIGINT UNSIGNED NULL,  -- NULLの場合は顧客全体（どの顧客？）
+    ...
+);
+```
+
+**問題点**:
+- 設計変更により既存の機能要件が満たせなくなる
+- `fqdn_id`がNULLの場合にどの顧客に対する設定か判別できなくなる
+- 機能要件の見落とし
+
+**✅ 良い例**: 設計変更時に機能要件を再確認し、必要なカラムを維持する
+
+```sql
+-- customer_idを維持して、fqdn_idがNULLの場合でも顧客を特定できる
+CREATE TABLE customer_signature_group_settings (
+    customer_id BIGINT UNSIGNED NOT NULL,  -- 必須：fqdn_idがNULLの場合でも顧客を特定
+    fqdn_id BIGINT UNSIGNED NULL,  -- NULLの場合は顧客全体
+    ...
+);
+```
+
+**理由**:
+- 既存の機能要件を満たすことができる
+- 設計変更時の影響範囲を明確にできる
+- 実装時の混乱を防ぐことができる
+
+### 実装チェックリスト
+
+- [ ] 意図的な非正規化がある場合、その理由と整合性維持方法をドキュメントに明記する
+- [ ] 設計変更時に既存の機能要件を再確認し、必要なカラムを維持する
+- [ ] 冗長なカラムがある場合、その存在理由を明確にする
+- [ ] データ整合性維持の方法（アプリケーションロジック、トリガー、整合性チェック）を選択し、ドキュメント化する
+
+**参照**: PR #37 - Issue MWD-77: Task 2.1: ER図作成（Gemini Code Assistレビュー指摘 - 第3回）
+
 ---
