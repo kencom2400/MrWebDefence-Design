@@ -2107,31 +2107,154 @@ erDiagram
 - INDEX (status)
 - INDEX (created_at)
 
-### 3.2.5 データベース正規化設計
+### 3.2.5 外部キー制約の詳細定義
+
+#### 3.2.5.1 外部キー制約の方針
+
+- **参照整合性**: すべての外部キーに参照整合性制約を設定
+- **削除時の動作**: テーブル間の関係性に応じて適切な動作を設定
+- **更新時の動作**: 主キーの更新は通常発生しないため、RESTRICTを基本とする
+
+#### 3.2.5.2 外部キー制約の定義
+
+##### ユーザー関連テーブル
+
+**users**
+- `customer_id` → `customers.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - 顧客が削除された場合、ユーザーのcustomer_idをNULLに設定（サービス管理者ユーザーとして残す）
+
+**user_roles**
+- `user_id` → `users.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、関連するロール割り当ても削除
+- `role_id` → `roles.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - ロールが使用されている場合は削除不可
+
+**sessions**
+- `user_id` → `users.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、関連するセッションも削除
+
+**ip_allowlist**
+- `user_id` → `users.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、関連するAllowListエントリも削除
+- `role_id` → `roles.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - ロールが使用されている場合は削除不可（ロールはマスターデータのため、意図しない設定削除を防ぐ）
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連するAllowListエントリも削除
+- `fqdn_id` → `fqdns.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - FQDNが削除された場合、関連するAllowListエントリも削除
+
+##### 顧客・FQDN関連テーブル
+
+**fqdns**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連するFQDNも削除
+
+**customer_signature_group_settings**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連する設定も削除
+- `fqdn_id` → `fqdns.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - FQDNが削除された場合、関連する設定も削除
+- `group_id` → `signature_groups.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - シグニチャグループが削除された場合、関連する設定も削除
+- `applied_by` → `users.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、applied_byをNULLに設定
+
+**fqdn_signature_applications**
+- `fqdn_id` → `fqdns.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - FQDNが削除された場合、関連する適用設定も削除
+- `signature_id` → `signatures.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - シグニチャが使用されている場合は削除不可（論理削除を推奨）
+- `group_id` → `signature_groups.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - シグニチャグループが削除された場合、関連する適用設定も削除
+- `group_member_id` → `signature_group_members.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - シグニチャグループメンバーが削除された場合、関連する適用設定も削除
+
+##### シグニチャ関連テーブル
+
+**signature_groups**
+- `created_by` → `users.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、created_byをNULLに設定
+
+**signature_group_members**
+- `group_id` → `signature_groups.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - シグニチャグループが削除された場合、関連するメンバーも削除
+- `signature_id` → `signatures.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - シグニチャが使用されている場合は削除不可（論理削除を推奨）
+
+**signature_candidates**
+- `signature_id` → `signatures.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - シグニチャが削除された場合、signature_idをNULLに設定（候補として残す）
+
+**signature_applications**
+- `signature_id` → `signatures.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - シグニチャが使用されている場合は削除不可（履歴として保持）
+- `applied_by` → `users.id`: ON DELETE SET NULL, ON UPDATE RESTRICT
+  - ユーザーが削除された場合、applied_byをNULLに設定
+
+##### 通知関連テーブル
+
+**notification_channels**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連する通知チャネルも削除
+
+**notification_rules**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連する通知ルールも削除
+- `channel_id` → `notification_channels.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 通知チャネルが削除された場合、関連する通知ルールも削除
+
+**notifications**
+- `customer_id` → `customers.id`: ON DELETE CASCADE, ON UPDATE RESTRICT
+  - 顧客が削除された場合、関連する通知履歴も削除
+- `rule_id` → `notification_rules.id`: ON DELETE RESTRICT, ON UPDATE RESTRICT
+  - 通知ルールが使用されている場合は削除不可（履歴として保持）
+
+### 3.2.6 データベース正規化設計
 
 - **第1正規形**: すべてのテーブルで原子性を確保
 - **第2正規形**: 部分関数従属を排除（user_roles等で実現）
 - **第3正規形**: 推移的関数従属を排除
 
-### 3.2.6 インデックス戦略
+### 3.2.7 インデックス戦略
 
-#### 3.2.6.1 基本方針
+#### 3.2.7.1 基本方針
 
 - **主キー**: すべてのテーブルにAUTO_INCREMENTの主キーを設定
 - **外部キー**: 外部キーカラムにインデックスを設定
 - **検索条件**: WHERE句で頻繁に使用されるカラムにインデックスを設定
 - **結合**: JOINで使用されるカラムにインデックスを設定
 
-#### 3.2.6.2 複合インデックス
+#### 3.2.7.2 複合インデックス
 
 - `user_roles(user_id, role_id)`: ユニーク制約と検索の両方に対応
 - `customer_signature_group_settings(customer_id, fqdn_id, group_id)`: ユニーク制約
 - `fqdn_signature_applications(fqdn_id, group_member_id)`: ユニーク制約
 - `fqdn_signature_applications(fqdn_id, order)`: 順序での検索を最適化
 
-### 3.2.7 データベースマイグレーション設計（Flyway）
+#### 3.2.7.3 ユニーク制約の一覧
 
-#### 3.2.7.1 マイグレーションファイル命名規則
+以下のテーブルにユニーク制約が設定されています：
+
+- **users**: `email` - メールアドレスの一意性を保証
+- **roles**: `name` - ロール名の一意性を保証
+- **user_roles**: `(user_id, role_id)` - 同一ユーザーに同じロールを重複割り当て不可
+- **fqdns**: `fqdn` - FQDNの一意性を保証（グローバルに一意）
+- **signature_group_members**: `(group_id, signature_id)` - 同一グループ内で同じシグニチャを重複追加不可
+- **customer_signature_group_settings**: `(customer_id, fqdn_id, group_id)` - 同一顧客・FQDN・グループの組み合わせの重複を防止
+- **fqdn_signature_applications**: `(fqdn_id, group_member_id)` - 同一FQDN・グループメンバーの組み合わせの重複を防止
+- **batch_schedules**: `schedule_type` - スケジュールタイプの一意性を保証（各タイプは1つのスケジュールのみ）
+
+#### 3.2.7.4 インデックス設計の考慮事項
+
+- **パフォーマンス**: 頻繁に使用される検索条件にインデックスを設定
+- **更新コスト**: インデックスは更新時のコストがかかるため、必要最小限に
+- **複合インデックス**: 複数のカラムを組み合わせた検索が多い場合は複合インデックスを検討
+- **カーディナリティ**: カーディナリティが低い（値の種類が少ない）カラムはインデックスの効果が限定的
+- **NULL値**: NULL値が多いカラムはインデックスの効果が限定的
+
+### 3.2.8 データベースマイグレーション設計（Flyway）
+
+#### 3.2.8.1 マイグレーションファイル命名規則
 
 ```
 V{version}__{description}.sql
@@ -2139,13 +2262,13 @@ V{version}__{description}.sql
 
 例: `V1__create_users_table.sql`
 
-#### 3.2.7.2 マイグレーション実行タイミング
+#### 3.2.8.2 マイグレーション実行タイミング
 
 - **dev環境**: デプロイ時に自動実行
 - **test環境**: デプロイ時に全マイグレーションを必ず実施
 - **本番環境**: デプロイ時に実行（手動実行も可能）
 
-#### 3.2.7.3 ロールバック戦略
+#### 3.2.8.3 ロールバック戦略
 
 - **dev/test環境**: Flywayのロールバック機能、またはロールバック用SQLをマイグレーションとして管理
 - **本番環境**: 
@@ -2155,14 +2278,14 @@ V{version}__{description}.sql
   - **記録**: ロールバック実行履歴を記録
   - **注意**: データ損失のリスクがある場合は、バックアップからのリストアを優先
 
-### 3.2.8 実装方針
+### 3.2.9 実装方針
 
 1. **文字コード**: utf8mb4を使用（データベース、テーブル、カラムすべて）
 2. **タイムゾーン**: JST（Asia/Tokyo）を使用
 3. **接続プール**: デフォルト5本、最大接続数100（DECISION_POINTS.mdと統一、負荷試験に基づいて段階的に調整可能）
 4. **トランザクション**: 必要に応じて明示的にトランザクションを開始
 
-### 3.2.9 注意事項
+### 3.2.10 注意事項
 
 - 外部キー制約はデータ整合性を保つが、パフォーマンスに影響する可能性がある
 - 大量データが想定されるテーブル（ログ関連）は将来パーティショニングを検討
