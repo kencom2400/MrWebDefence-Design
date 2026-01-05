@@ -2439,9 +2439,12 @@ R{description}.sql
 初期データ投入用SQLは、通常のマイグレーションディレクトリとは別のディレクトリに配置します。
 
 ```
-src/main/resources/db/migration/          # 通常のマイグレーション
-src/main/resources/db/migration/seed/     # 初期データ投入用（Repeatable Migrations）
+src/main/resources/db/
+├── migration/      # 通常のマイグレーション
+└── seed/           # 初期データ投入用（Repeatable Migrations）
 ```
+
+**注意**: `seed`ディレクトリを`migration`のサブディレクトリとして配置すると、Flywayのデフォルトの動作（サブディレクトリの再帰的なスキャン）により、`locations=db/migration`と指定した場合でも`seed`ディレクトリ内のファイルが実行対象に含まれてしまいます。そのため、`seed`ディレクトリは`db`の直下に配置し、`migration`ディレクトリとは同階層にします。
 
 **ファイル構成例**:
 ```
@@ -2475,11 +2478,13 @@ src/main/resources/db/migration/seed/
 4. **実行方法の例**:
    ```bash
    # 通常のマイグレーション実行（初期データ投入なし）
-   flyway migrate -locations=filesystem:src/main/resources/db/migration
+   flyway migrate -locations=classpath:db/migration
    
    # 初期データ投入を含むマイグレーション実行
-   flyway migrate -locations=filesystem:src/main/resources/db/migration,filesystem:src/main/resources/db/migration/seed
+   flyway migrate -locations=classpath:db/migration,classpath:db/seed
    ```
+   
+   **注意**: Maven/Gradleプロジェクトの標準的な構成では`classpath:`を使用します。`filesystem:`はFlywayコマンドラインツールをプロジェクトルートから実行する場合などに使用されます。
 
 **Repeatable Migrationsの特徴**:
 - バージョン番号を持たない（`R`プレフィックスを使用）
