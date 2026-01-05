@@ -1363,6 +1363,20 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        varchar contact_email
+        boolean is_active
+    }
+    
+    fqdns {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
+        boolean is_active
+    }
 ```
 
 #### 3.2.3.2 顧客・FQDN関連
@@ -1399,6 +1413,7 @@ erDiagram
     
     customer_signature_group_settings {
         bigint_unsigned id PK
+        bigint_unsigned customer_id FK
         bigint_unsigned fqdn_id FK
         bigint_unsigned group_id FK
         enum application_status
@@ -1417,6 +1432,27 @@ erDiagram
         boolean is_enabled
         datetime created_at
         datetime updated_at
+    }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        boolean is_active
+    }
+    
+    fqdns {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
+        boolean is_active
+    }
+    
+    users {
+        bigint_unsigned id PK
+        varchar email UK
+        varchar name
+        bigint_unsigned customer_id FK
+        boolean is_active
     }
 ```
 
@@ -1527,6 +1563,12 @@ erDiagram
         datetime sent_at
         datetime created_at
     }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        boolean is_active
+    }
 ```
 
 #### 3.2.3.5 設定関連
@@ -1555,6 +1597,27 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+    
+    customers {
+        bigint_unsigned id PK
+        varchar name
+        boolean is_active
+    }
+    
+    fqdns {
+        bigint_unsigned id PK
+        bigint_unsigned customer_id FK
+        varchar fqdn UK
+        boolean is_active
+    }
+    
+    users {
+        bigint_unsigned id PK
+        varchar email UK
+        varchar name
+        bigint_unsigned customer_id FK
+        boolean is_active
+    }
 ```
 
 #### 3.2.3.6 全体ER図
@@ -1582,6 +1645,7 @@ erDiagram
     users ||--o{ signature_applications : "applies"
     
     %% 顧客別シグニチャグループ設定
+    customers ||--o{ customer_signature_group_settings : "has"
     fqdns ||--o{ customer_signature_group_settings : "applies_to"
     signature_groups ||--o{ customer_signature_group_settings : "configured_in"
     users ||--o{ customer_signature_group_settings : "applied_by"
@@ -1596,6 +1660,23 @@ erDiagram
     customers ||--o{ notifications : "generated_for"
     notification_channels ||--o{ notification_rules : "used_by"
     notification_rules ||--o{ notifications : "triggers"
+    
+    %% 設定関連
+    password_policy {
+        bigint_unsigned id PK
+        int min_length
+        boolean require_uppercase
+        boolean require_lowercase
+        boolean require_digit
+        boolean require_special
+    }
+    
+    batch_schedules {
+        bigint_unsigned id PK
+        varchar schedule_type UK
+        time schedule_time
+        boolean is_enabled
+    }
     
     users {
         bigint_unsigned id PK
@@ -1852,6 +1933,7 @@ erDiagram
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | BIGINT UNSIGNED | PRIMARY KEY, AUTO_INCREMENT | ID |
+| customer_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | 顧客ID |
 | fqdn_id | BIGINT UNSIGNED | NULL, FOREIGN KEY | FQDN ID（NULLの場合は顧客全体） |
 | group_id | BIGINT UNSIGNED | NOT NULL, FOREIGN KEY | グループID |
 | application_status | ENUM('applied', 'not_applied') | NOT NULL | 適用状態 |
@@ -1861,11 +1943,12 @@ erDiagram
 
 **インデックス**:
 - PRIMARY KEY (id)
-- UNIQUE KEY (fqdn_id, group_id)
+- UNIQUE KEY (customer_id, fqdn_id, group_id)
+- INDEX (customer_id)
 - INDEX (fqdn_id)
 - INDEX (group_id)
 
-**説明**: FQDNに対してシグニチャグループを適用するかどうかを管理するテーブル。シグニチャの順序は管理しない。`fqdn_id`がNULLの場合は、その顧客全体に対してシグニチャグループを適用する設定となる。
+**説明**: FQDNに対してシグニチャグループを適用するかどうかを管理するテーブル。シグニチャの順序は管理しない。`fqdn_id`がNULLの場合は、`customer_id`で指定された顧客全体に対してシグニチャグループを適用する設定となる。`customer_id`は必須であり、`fqdn_id`がNULLの場合でもどの顧客に対する設定かを判別できる。
 
 ##### fqdn_signature_applications（FQDN別シグニチャ適用順序）
 
@@ -1893,7 +1976,14 @@ erDiagram
 
 **説明**: FQDNに対して適用されるシグニチャの順序と有効/無効を管理するテーブル。`order`カラムで適用順序を定義し、`is_enabled`で有効/無効を制御する。`group_id`と`group_member_id`により、どのシグニチャグループのどのメンバーに起因しているかを判別できる。これにより、グループの削除・変更時に影響を受けるレコードを特定し、変更を伝搬できる。
 
-**注意**: `group_member_id`は`signature_group_members`テーブルの主キーであり、既に`group_id`と`signature_id`を一意に特定するため、ユニークキーは`(fqdn_id, group_member_id)`で十分です。
+**注意事項**:
+- `group_member_id`は`signature_group_members`テーブルの主キーであり、既に`group_id`と`signature_id`を一意に特定するため、ユニークキーは`(fqdn_id, group_member_id)`で十分です。
+- `signature_id`と`group_id`カラムは、`group_member_id`から取得可能であるため、理論的には冗長です。しかし、パフォーマンス向上のための意図的な非正規化として保持しています。これにより、`group_member_id`へのJOINなしで`signature_id`や`group_id`に直接アクセスできるため、クエリパフォーマンスが向上します。
+- **データ整合性の維持**: `signature_id`と`group_id`は`group_member_id`と整合性が保たれている必要があります。データ不整合を防ぐため、以下のいずれかの方法で整合性を維持する必要があります：
+  - **アプリケーションロジック**: レコード作成・更新時に、`group_member_id`から`signature_id`と`group_id`を取得して設定する
+  - **データベーストリガー**: INSERT/UPDATE時に自動的に`signature_id`と`group_id`を設定するトリガーを実装する
+  - **定期的な整合性チェック**: バッチ処理などで定期的に整合性をチェックし、不整合があれば修正する
+- 実装時には、上記の整合性維持方法のいずれかを選択し、ドキュメント化してください。
 
 #### 3.2.4.4 設定関連テーブル
 
@@ -2035,7 +2125,7 @@ erDiagram
 #### 3.2.6.2 複合インデックス
 
 - `user_roles(user_id, role_id)`: ユニーク制約と検索の両方に対応
-- `customer_signature_group_settings(fqdn_id, group_id)`: ユニーク制約
+- `customer_signature_group_settings(customer_id, fqdn_id, group_id)`: ユニーク制約
 - `fqdn_signature_applications(fqdn_id, group_member_id)`: ユニーク制約
 - `fqdn_signature_applications(fqdn_id, order)`: 順序での検索を最適化
 
