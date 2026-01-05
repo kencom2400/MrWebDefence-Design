@@ -61,22 +61,47 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--host)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo -e "${RED}エラー: オプション '$1' には引数が必要です。${NC}" >&2
+                    show_help
+                    exit 1
+                fi
                 DB_HOST="$2"
                 shift 2
                 ;;
             -P|--port)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo -e "${RED}エラー: オプション '$1' には引数が必要です。${NC}" >&2
+                    show_help
+                    exit 1
+                fi
                 DB_PORT="$2"
                 shift 2
                 ;;
             -u|--user)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo -e "${RED}エラー: オプション '$1' には引数が必要です。${NC}" >&2
+                    show_help
+                    exit 1
+                fi
                 DB_USER="$2"
                 shift 2
                 ;;
             -p|--password)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo -e "${RED}エラー: オプション '$1' には引数が必要です。${NC}" >&2
+                    show_help
+                    exit 1
+                fi
                 DB_PASSWORD="$2"
                 shift 2
                 ;;
             -d|--database)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo -e "${RED}エラー: オプション '$1' には引数が必要です。${NC}" >&2
+                    show_help
+                    exit 1
+                fi
                 DB_NAME="$2"
                 shift 2
                 ;;
