@@ -11280,4 +11280,58 @@ CREATE TABLE customer_signature_group_settings (
 
 **参照**: PR #37 - Issue MWD-77: Task 2.1: ER図作成（Gemini Code Assistレビュー指摘 - 第3回）
 
+### 外部キー制約の整合性確保
+
+**❌ 悪い例**: 同じエンティティに対する外部キー制約の方針が異なる
+
+```sql
+-- user_rolesテーブル: ロールはマスターデータとして保護
+ALTER TABLE user_roles
+  ADD CONSTRAINT fk_user_roles_role_id
+  FOREIGN KEY (role_id) REFERENCES roles(id)
+  ON DELETE RESTRICT;
+
+-- ip_allowlistテーブル: 同じロールだがCASCADEで削除可能
+ALTER TABLE ip_allowlist
+  ADD CONSTRAINT fk_ip_allowlist_role_id
+  FOREIGN KEY (role_id) REFERENCES roles(id)
+  ON DELETE CASCADE;
+```
+
+**問題点**:
+- 同じエンティティ（ロール）に対する外部キー制約の方針が異なる
+- マスターデータとして保護すべきエンティティが、一部のテーブルでは削除可能になる
+- 意図しない設定削除につながる可能性がある
+- データ整合性の観点から問題がある
+
+**✅ 良い例**: 同じエンティティに対する外部キー制約の方針を統一する
+
+```sql
+-- user_rolesテーブル: ロールはマスターデータとして保護
+ALTER TABLE user_roles
+  ADD CONSTRAINT fk_user_roles_role_id
+  FOREIGN KEY (role_id) REFERENCES roles(id)
+  ON DELETE RESTRICT;
+
+-- ip_allowlistテーブル: 同じロールに対してもRESTRICTで保護
+ALTER TABLE ip_allowlist
+  ADD CONSTRAINT fk_ip_allowlist_role_id
+  FOREIGN KEY (role_id) REFERENCES roles(id)
+  ON DELETE RESTRICT;
+```
+
+**理由**:
+- データ整合性が保たれる
+- マスターデータの保護が一貫する
+- 意図しない設定削除を防ぐことができる
+- 実装時の混乱を防ぐことができる
+
+### 実装チェックリスト
+
+- [ ] 同じエンティティに対する外部キー制約の方針が統一されているか確認
+- [ ] マスターデータとして保護すべきエンティティは、すべてのテーブルでRESTRICTを使用する
+- [ ] 外部キー制約の方針を決定する際は、エンティティの性質（マスターデータ、トランザクションデータ等）を考慮する
+
+**参照**: PR #38 - Issue MWD-78: Task 2.2: テーブル定義書作成（Gemini Code Assistレビュー指摘）
+
 ---
