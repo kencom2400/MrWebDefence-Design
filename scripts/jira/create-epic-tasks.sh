@@ -18,9 +18,6 @@ cleanup_temp_files() {
 # スクリプト終了時に一時ファイルをクリーンアップ
 trap cleanup_temp_files EXIT INT TERM
 
-# 一時ディレクトリを作成
-TEMP_DIR=$(mktemp -d -t "epic-tasks-${EPIC_NUM}-XXXXXX" 2>/dev/null || mktemp -d)
-
 if [ $# -lt 1 ]; then
     echo "使用方法: $0 <epic_num>" >&2
     echo "例: $0 2" >&2
@@ -28,6 +25,9 @@ if [ $# -lt 1 ]; then
 fi
 
 EPIC_NUM=$1
+
+# 一時ディレクトリを作成
+TEMP_DIR=$(mktemp -d -t "epic-tasks-${EPIC_NUM}-XXXXXX" 2>/dev/null || mktemp -d)
 EPIC_KEY="MWD-${EPIC_NUM}"
 EPIC_TASK_DESIGN="${REPO_ROOT}/docs/EPIC_TASK_DESIGN.md"
 
@@ -90,6 +90,11 @@ for task in tasks:
 - {repo}
 """)
     
+    # タイトルを一時ファイルに保存（シェル側で再利用するため）
+    title_file = os.path.join(temp_dir, f"task{epic_num}_{task_num}_title.txt")
+    with open(title_file, 'w', encoding='utf-8') as f:
+        f.write(task_title)
+    
     print(f"Task {epic_num}.{task_num}: {task_title}")
     print(f"  本文ファイル: {body_file}")
 
@@ -112,9 +117,15 @@ for task_file in "${TEMP_DIR}"/task${EPIC_NUM}_*_body.md; do
     # タスク番号を抽出
     task_num=$(basename "$task_file" | sed "s/task${EPIC_NUM}_\(.*\)_body.md/\1/")
     
-    # タイトルを取得
-    title_line=$(grep -A 1 "##### Task ${EPIC_NUM}.${task_num}:" "$EPIC_TASK_DESIGN" | head -1)
-    title=$(echo "$title_line" | sed "s/##### Task [0-9.]*: //")
+    # タイトルを取得（Pythonスクリプトで保存したファイルから読み込む）
+    title_file="${TEMP_DIR}/task${EPIC_NUM}_${task_num}_title.txt"
+    if [ -f "$title_file" ]; then
+        title=$(cat "$title_file")
+    else
+        # フォールバック: ファイルが存在しない場合は従来の方法で取得
+        title_line=$(grep -A 1 "##### Task ${EPIC_NUM}.${task_num}:" "$EPIC_TASK_DESIGN" | head -1)
+        title=$(echo "$title_line" | sed "s/##### Task [0-9.]*: //")
+    fi
     
     echo "作成中: Task ${EPIC_NUM}.${task_num}: ${title}"
     

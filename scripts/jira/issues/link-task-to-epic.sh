@@ -122,14 +122,19 @@ get_epic_link_field_id() {
     # 方法4: 一般的なEpic LinkフィールドIDを試す
     local common_field_ids=("customfield_10014" "customfield_10011" "customfield_10016" "customfield_10015")
     
-    for field_id in "${common_field_ids[@]}"; do
-        # フィールドが存在するかテスト（実際の更新は行わない）
-        local test_response=$(jira_api_call "GET" "issue/${task_key}?fields=${field_id}" 2>/dev/null)
-        if [ $? -eq 0 ] && echo "$test_response" | jq -e ".fields.${field_id}" >/dev/null 2>&1; then
-            echo "$field_id"
-            return 0
-        fi
-    done
+    # パフォーマンス改善: 複数のフィールドを1回のAPI呼び出しで取得
+    local fields_list=$(IFS=','; echo "${common_field_ids[*]}")
+    local test_response=$(jira_api_call "GET" "issue/${task_key}?fields=${fields_list}" 2>/dev/null)
+    
+    if [ $? -eq 0 ] && echo "$test_response" | jq -e . >/dev/null 2>&1; then
+        for field_id in "${common_field_ids[@]}"; do
+            # ダブルクォートを使用して変数を展開
+            if echo "$test_response" | jq -e ".fields.\"${field_id}\"" >/dev/null 2>&1; then
+                echo "$field_id"
+                return 0
+            fi
+        done
+    fi
     
     # デフォルトのEpic LinkフィールドIDを返す
     echo "customfield_10014"
